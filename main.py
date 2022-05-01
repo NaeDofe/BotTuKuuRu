@@ -51,22 +51,32 @@ class StartFrame(tk.Frame):
     def __init__(self, master = None, controller = None) -> None:
         super().__init__(master)
         
+        self.left_frame = tk.Frame(self)
+        self.right_frame = tk.Frame(self)
+        
         self.creation_btn = ttk.Button(
-            self, text="新規作成", 
+            self.left_frame, 
+            text="新規作成", 
             command=lambda: controller.show_frame("Creation"), 
             width = 20,
             padding=40)
         self.open_btn = ttk.Button(
-            self, 
+            self.right_frame, 
             text="開く",
             command=lambda: controller.show_frame("Open"),
             width = 20,
             padding=40)
-
-        self.creation_btn.grid(row=0, column=0, padx=(230,0), pady=(200,0))
-        self.open_btn.grid(row=0, column=1, padx=(100,0), pady=(200,0))
         
-         
+        self.left_frame.grid(row=0, column=0, sticky=tk.NSEW)
+        self.right_frame.grid(row=0, column=1, sticky=tk.NSEW)
+
+        self.creation_btn.pack(anchor='center', expand=1)
+        self.open_btn.pack(anchor='center', expand=1)
+        
+        self.columnconfigure(0, weight=1)
+        self.columnconfigure(1, weight=1)
+        self.rowconfigure(0, weight=1)
+        
 
 class CreationFrame(tk.Frame):
     def __init__(self, master = None, controller = None) -> None:
@@ -74,22 +84,25 @@ class CreationFrame(tk.Frame):
         
         self.controller = controller
         
-        self.title_lbl = ttk.Label(self, text="新規作成")
-        self.name_lbl = ttk.Label(self, text="名前")
-        self.name_entry = ttk.Entry(self, width=40)
-        self.token_lbl = ttk.Label(self, text="TOKEN")
-        self.token_entry = ttk.Entry(self, width=40)
-        self.prefix_lbl = ttk.Label(self, text="PREFIX")
-        self.prefix_entry = ttk.Entry(self, width=40)
+        self.frame = tk.Frame(self)
+        
+        self.title_lbl = ttk.Label(self.frame, text="新規作成")
+        self.name_lbl = ttk.Label(self.frame, text="名前")
+        self.name_entry = ttk.Entry(self.frame, width=40)
+        self.token_lbl = ttk.Label(self.frame, text="TOKEN")
+        self.token_entry = ttk.Entry(self.frame, width=40)
+        self.prefix_lbl = ttk.Label(self.frame, text="PREFIX")
+        self.prefix_entry = ttk.Entry(self.frame, width=40)
         self.prefix_entry.insert(0,"/")
         self.create_btn = ttk.Button(
-            self, text="作成", 
+            self.frame, text="作成", 
             command=self.create)
         self.close_btn = ttk.Button(
-            self, text="閉じる", 
+            self.frame, text="閉じる", 
             command=lambda: self.controller.show_frame("Start"))
+        
+        self.frame.grid(row=0, column=0)
 
-        self.grid_columnconfigure(0, minsize=350)
         self.title_lbl.grid(row=0, column=2)
         self.name_lbl.grid(row=1, column=1)
         self.name_entry.grid(row=1, column=2)
@@ -99,6 +112,8 @@ class CreationFrame(tk.Frame):
         self.prefix_entry.grid(row=3, column=2)
         self.create_btn.grid(row=4, column=2)
         self.close_btn.grid(row = 5, column=2)
+        
+        self.grid_columnconfigure(0, weight=1)
     
     def create(self):
         name = self.name_entry.get()
@@ -135,10 +150,9 @@ class OpenFrame(tk.Frame):
             self, text="閉じる", 
             command=lambda: controller.show_frame("Start"))
         
-        self.grid_columnconfigure(0, minsize=330)
-        self.file_com.grid(row=0, column=1)
-        self.open_btn.grid(row=1, column=1)
-        self.close_btn.grid(row=2, column=1)
+        self.file_com.pack(anchor='center')
+        self.open_btn.pack(anchor='center')
+        self.close_btn.pack(anchor='center')
         
     
     def open(self):
