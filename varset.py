@@ -3,8 +3,10 @@ import tkinter as tk
 import tc
 
 class VariableSettingFrame(ttk.Frame):
-    def __init__(self, master = None):
+    def __init__(self, master = None, con = None):
         super().__init__(master, style="MYStyle.TFrame")
+        
+        self.con = con
         
         self.name_lab = ttk.Label(self, text="名前", style="MYStyle.TLabel")
         self.name_ent = ttk.Entry(self, width=40)
@@ -39,10 +41,13 @@ class VariableSettingFrame(ttk.Frame):
     
     
 class VariableDetailFrame(VariableSettingFrame):
-    def __init__(self, master = None, top = None, var_name = "", var_type = "", var_default = ""):
-        super().__init__(master)
+    def __init__(self, master = None, top = None, var_name = "", var_type = "", var_default = "", par_name = "global"):
+        super().__init__(master, top.con)
         
         self.top = top
+        
+        self.par_name = par_name
+        self.original_name = var_name
         
         self.frame_name = ttk.Label(self, text="変数の詳細設定", style="MYStyle.TLabel")
         self.change_btn = ttk.Button(self, text="変更", command=self.change_var, style="Green.TButton")
@@ -60,60 +65,102 @@ class VariableDetailFrame(VariableSettingFrame):
         var_name = self.name_ent.get()
         var_type = self.type_com.get()
         var_default = self.default_ent.get()
+        global_var = self.top.global_var
         
-        var_tree = self.top.var_tree
-        variables = self.top.variables
-        select_id = self.top.selected_var_id
-        original_name = var_tree.item(select_id, "values")[1]
+        vars = {}
         
-        if not self.no_mistake(var_name, var_type, var_default, variables, original_name):
+        if self.par_name == "global":
+            var_tree = self.top.var_tree
+            variables = global_var
+            vars = global_var
+            select_id = self.top.selected_var_id
+        else:
+            var_tree = self.con.right_command_frame.commands[self.par_name]["var_tree"]
+            vars = self.con.right_command_frame.commands[self.par_name]["vars"]
+            variables = {**global_var, **vars}
+            select_id = self.top.selected_var_id
+        
+        if not self.no_mistake(var_name, var_type, var_default, variables, self.original_name):
             return
         
         index = var_tree.index(select_id)
         
-        variables.pop(original_name)
+        vars.pop(self.original_name)
         var_tree.delete(self.top.selected_var_id)
         
-        variables[var_name] = {"type": var_type, "val": var_default, "frame": self}
+        
+        vars[var_name] = {"type": var_type, "val": var_default, "frame": self}
         item_id = var_tree.insert(parent="", index=index, values=(var_type, var_name, var_default,))
         
+        self.original_name = var_name
         self.top.selected_var_id = item_id
-        self.top.variables = variables
+        
+        if self.par_name == "global":
+            self.top.global_var = vars
+        else:
+            self.con.right_command_frame.commands[self.par_name]["vars"] = vars
     
     def delete_var(self):
         if not messagebox.askquestion("確認", "変数を削除しますか？"):
             return
+        if self.par_name == "global":
+            var_tree = self.top.var_tree
+            self.top.variables.pop(self.original_name)
+        else:
+            var_tree = self.con.right_command_frame.commands[self.par_name]["var_tree"]
+            self.con.right_command_frame.commands[self.par_name]["vars"].pop(self.original_name)
         
-        var_tree = self.top.var_tree
-        select_id = self.top.selected_var_id
-        delete_name = var_tree.item(select_id, "values")[1]
+        var_tree.delete(self.top.selected_var_id)
         
-        var_tree.delete(select_id)
-        self.top.variables.pop(delete_name)
         self.top.selected_var_id = ""
         
         self.destroy()
 
 class AddVariableFrame(VariableSettingFrame):
     def __init__(self, master = None, con = None):
-        super().__init__(master)
+        super().__init__(master, con)
         
-        self.con = con
 
         self.frame_name = ttk.Label(self, text="変数の追加", style="MYStyle.TLabel")
         self.add_btn = ttk.Button(self, text="追加", command=self.append_var_tree, style="Green.TButton")
+        self.dest_lab = ttk.Label(self, text="保存先", style="MYStyle.TLabel")
+        self.dest_ent = ttk.Combobox(self, values=("global"))
         
         self.frame_name.grid(row=0, column=1)
         self.add_btn.grid(row=4, column=1)
+        self.dest_lab.grid(row=0, column=2)
+        self.dest_ent.grid(row=1, column=2)
+        
+        self.update_dest()
+    
+    def update_dest(self):
+        dests = list(self.con.right_command_frame.commands.keys())
+        dests.append("global")
+        
+        self.dest_ent.configure(values=list(reversed(dests)))
 
     
     def append_var_tree(self):
-        var_tree = self.con.top_left_frame.var_tree
-        variables = self.con.top_left_frame.variables
+        global_var = self.con.top_left_frame.global_var
         
         var_name = self.name_ent.get()
         var_type = self.type_com.get()
         var_default = self.default_ent.get()
+        var_dest = self.dest_ent.get()
+        
+        command_names = list(self.con.right_command_frame.commands.keys())
+        command_names.append("global")
+        
+        if var_dest not in command_names:
+            messagebox.showerror('エラー', '保存先が間違っています')
+            return
+        
+        variables = {}
+        if var_dest == "global":
+            variables = global_var
+        else:
+            local_var = self.con.right_command_frame.commands[var_dest]["vars"]
+            variables = {**global_var, **local_var}
         
         if not self.no_mistake(var_name, var_type, var_default, variables):
             return
@@ -123,11 +170,20 @@ class AddVariableFrame(VariableSettingFrame):
             top=self.con.top_left_frame, 
             var_name=var_name, 
             var_type=var_type, 
-            var_default=var_default)
+            var_default=var_default,
+            par_name=var_dest)
         frame.grid(row=0, column=0, sticky="nsew")
         
-        variables[var_name] = {"type": var_type, "val": var_default, "frame": frame}
-        self.con.top_left_frame.variables = variables
+        if var_dest == "global":
+            self.con.top_left_frame.variables[var_name] = {"type": var_type, "val": var_default, "frame": frame}
+            
+            var_tree = self.con.top_left_frame.var_tree
+            var_tree.insert(parent="", index="end", values=(var_type, var_name, var_default,))
+        else:
+            self.con.right_command_frame.commands[var_dest]["vars"][var_name] = {"type": var_type, "val": var_default, "frame": frame}
+            
+            var_tree = self.con.right_command_frame.commands[var_dest]["var_tree"]
+            var_tree.insert(parent="", index="end", values=(var_type, var_name, var_default,))
         
-        var_tree.insert(parent="", index="end", values=(var_type, var_name, var_default,))
+        
         

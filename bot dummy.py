@@ -1,7 +1,9 @@
-from pickletools import opcodes
 from discord.ext import commands
+from tkinter import ttk
+from tkinter.scrolledtext import ScrolledText
 from decimal import Decimal
 import discord
+import tkinter as tk
 import threading
 import asyncio
 import time
@@ -10,28 +12,45 @@ import yaml
 import json
 import conv
 import datetime
+
+class LogBox(ScrolledText):
+    def __init__(self, master = None, **kwargs) -> None:
+        super().__init__(master, **kwargs)
+        self.tag_config('error', foreground='red')
+    
+    def linsert(self, index, chars, *args):
+        self.insert(index,chars+"\n", args)
+        self.see("end")
         
 class BotConsole():
     
     def __init__(self) -> None:
+        super().__init__()
+        self.root = tk.Tk()
+        
+        self.stop_btn= ttk.Button(self.root, text="終了", command=self.stop, width = 20,padding=20)
+        
+        self.load_btn= ttk.Button(self.root, text="読み込み", command=self.load_file, width = 20,padding=20)
+        
+        self.log_box = LogBox(self.root, bg="gray5", fg="white", width=80, height=23, font= ("Yu Gothic UI Semibold", "16", "normal"))
+        
+        self.stop_btn.grid(row=0, column=0)
+        self.load_btn.grid(row=0, column=1)
+        self.log_box.grid(row=1, column=0, columnspan= 30)
         
         self.load_file()
         
         self.bot = commands.Bot(command_prefix=self.prefix)
         self.bot_cog = BotCog(self.bot, self)
         
-        thread = threading.Thread(target=self.typing_check)
-        thread.start()
-    
-    def typing_check(self):
+    def stop(self):
+        self.bot_cog.isStop = True
         while True:
-            text = input()
-            if text == "stop":
-                self.bot_cog.isStop = True
-                break
-            if text == "reload":
-                self.load_file()
+            time.sleep(1)
+            if self.bot_cog.bot_stop:
+                self.root.destroy()
             
+        
 
     def load_file(self):
         with open("./config.yml", "r") as yml:
@@ -45,16 +64,9 @@ class BotConsole():
         self.prefix = self.file["prefix"]
         self.token = self.file["token"]
         self.command_names = [key for key in  self.file["commands"].keys()]
-        
-        self.commands = {} 
-        self.local_vars = {} 
-        for command_name, command_datas in  self.file["commands"].items():
-            self.commands[command_name] = command_datas["nodes"]
-            self.local_vars[command_name] = self._file_to_var(command_datas["vars"])
-        
         self.vars = self._file_to_var(self.file["vars"])
-        
-        print("読み込み完了")
+          
+        self.log_box.linsert("end", "読み込み完了!!!")
     
     def _file_to_var(self, file):
         vars = {}
@@ -65,16 +77,18 @@ class BotConsole():
         return vars
         
     def bot_run(self):
+        thread = threading.Thread(target=self._run)
+        thread.start()
+    
+    def _run(self):
         self.bot.add_cog(self.bot_cog)
         try:
             self.bot.run(self.token)
         except:
-            print("TOKENが間違っています")
-            print("起動できませんでした")
+            self.log_box.linsert("end", "TOKENが間違っています", "error")
+            self.log_box.linsert("end", "起動できませんでした", "error")
         print("is end")
-        
-
-      
+            
 
 class BotCog(commands.Cog):
     
@@ -103,7 +117,7 @@ class BotCog(commands.Cog):
         
         args.pop(0)
         
-        rc = RunCommand(self.bot, self.con, message, self.con.commands[command_name], args, self.con.local_vars[command_name].copy())
+        rc = RunCommand(self.bot, self.con, message, self.con.file["commands"][command_name], args)
         await rc.run()
         
         
@@ -111,12 +125,12 @@ class BotCog(commands.Cog):
     async def on_command_error(self, ctx: commands.Context, error: commands.CommandError):
         if ctx.invoked_with in self.con.command_names:
             return
-        print(str(error))
+        self.con.log_box.linsert("end", str(error))
                 
     
     @commands.Cog.listener()
     async def on_ready(self):
-        print("起動しました")
+        self.con.log_box.linsert("end", "起動しました")
         
     @commands.Cog.listener()
     async def on_connect(self):
@@ -138,18 +152,16 @@ class BotCog(commands.Cog):
 
 class RunCommand():
     
-    def __init__(self, bot:commands.Bot, con: BotConsole, message: discord.Message, datas, args, local_vars) -> None:
+    def __init__(self, bot:commands.Bot, con: BotConsole, message: discord.Message, datas, args) -> None:
         self.bot = bot
         self.con = con
         self.message = message
         self.datas = datas
         self.args = args
-        self.local_vars = local_vars
     
     def create_options(self):
         options = {}
         options["vars"] = self.con.vars
-        options["local_vars"] = self.local_vars
         options["message"] = self.message
         options["times"] = self._get_time()
         
@@ -167,18 +179,6 @@ class RunCommand():
         times["second"] = now.second
         
         return times
-    
-    def get_var(self, name):
-        if name in self.con.vars:
-            return self.con.vars[name]
-        elif name in self.local_vars:
-            return self.local_vars[name]
-    
-    def set_var(self, name, val):
-        if name in self.con.vars:
-            self.con.vars[name] = val
-        elif name in self.local_vars:
-            self.local_vars[name] = val
 
         
     async def run(self):
@@ -250,7 +250,7 @@ class RunCommand():
             can_branch = False
         
         if not canSuccess:
-            print("コマンドを終了しました")
+            self.con.log_box.linsert("end","コマンドを終了しました", "error")
             return False, False
         
         if can_child_process:
@@ -266,13 +266,12 @@ class RunCommand():
         
     async def print_process(self, data):
         msg = conv.conversion(data[0], self.create_options())
-        print(msg)
+        self.con.log_box.linsert("end", msg)
         return True
     
     async def send_message_process(self, data):
         msg = conv.conversion(data[0], self.create_options())
-
-
+        
         if data[1] == 0:
             await self.message.channel.send(msg)
         if data[1] == 1:
@@ -300,13 +299,13 @@ class RunCommand():
         return True
     
     async def var_setting_process(self, data):
-        var = self.get_var(data[0])
+        var = self.con.vars[data[0]]
         val = data[1][0]
         if type(var) is int:
             val = conv.conversion(val, self.create_options())
             val, isFormula = conv.calculation(val)
             if not isFormula:
-                print("値がintではありません。")
+                self.con.log_box.linsert("end","値がintではありません。", "error")
                 return False
             if data[1][1] == 0:
                 var += val
@@ -317,7 +316,7 @@ class RunCommand():
             isRightness = tc.type_change("bool", data[1][2])
             val, isFormula = conv.calculation(val, "float", isRightness)
             if not isFormula:
-                print("値がfloatではありません。")
+                self.con.log_box.linsert("end","値がfloatではありません。", "error")
                 return False
             if data[1][1] == 0:
                 if isRightness:
@@ -340,12 +339,12 @@ class RunCommand():
             if data[1][1] == 2:
                 var = not var
             if data[1][1] == 3:
-                val = self.get_var(val)
+                val = self.con.vars[val]
                 if type(val) is not bool:
-                    print("値がboolではありません。")
+                    self.con.log_box.linsert("end","値がboolではありません。", "error")
                     return False
                 var = val
-        self.set_var(data[0], var)
+        self.con.vars[data[0]] = var
         return True
     
     async def for_process(self, data, child_datas):
@@ -397,7 +396,7 @@ class RunCommand():
                     try:
                         user1 = await self.bot.fetch_user(int(data[3]))
                     except:
-                        print("UserIdが間違っています")
+                        self.con.log_box.linsert("end","UserIdが間違っています", "error")
                         results.append(False)
                         continue
                     user_name1 = user1.name
@@ -408,7 +407,7 @@ class RunCommand():
                     try:
                         user2 = await self.bot.fetch_user(int(data[4]))
                     except:
-                        print("UserIdが間違っています")
+                        self.con.log_box.linsert("end","UserIdが間違っています", "error")
                         results.append(False)
                         continue
                     user_name2 = user2.name
@@ -418,7 +417,7 @@ class RunCommand():
             
             if data[0] == "変数":
                 var_name = data[1]
-                var1 = self.get_var(var_name)
+                var1 = self.con.vars[var_name]
                 var_type = data[2]
                 val = data[3]
                 cond = data[5]
@@ -444,19 +443,19 @@ class RunCommand():
                         results.append(var1%val == 0)
                         continue
                     else:
-                        val = self.get_var(val)
+                        val = self.con.vars[val]
                 if var_type == "str":
                     if val == 0:
                         val = data[4]
                     else:
-                        val = self.get_var(val)
+                        val = self.con.vars[val]
                 if var_type == "bool":
                     if val == 0:
                         val = True
                     elif val == 1:
                         val = False
                     else:
-                        val = self.get_var(val)
+                        val = self.con.vars[val]
                 
                 if cond == 0:
                     results.append(var1 == val)
@@ -495,4 +494,7 @@ class RunCommand():
 if __name__ == "__main__":
     app = BotConsole()
     app.bot_run()
+    app.root.mainloop()
+    
+    app.bot_cog.isStop = True
     

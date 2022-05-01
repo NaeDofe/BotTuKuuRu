@@ -2,14 +2,6 @@ from nodede import *
 import pyautogui
 import json
 
-class ElseFrame(NodeDetail):
-    def __init__(self, master = None, command_frame = None, command_name = "", node_id = "", data = []):
-        super().__init__(master, command_frame, command_name, node_id, data)
-        self.data = []
-        
-        self.need_save_lab.grid(row=0, column=0)
-        self.delete_btn.grid(row=1, column=0)
-
 class BranchFrame(NodeDetail):
     
     def __init__(self, master = None, command_frame = None, command_name = "", node_id = "", data = None):
@@ -203,7 +195,7 @@ class ConditionDetailWindow(tk.Toplevel):
         detail_btn.pack(pady=10)
         
     def click_change_btn(self):
-        SelectionWindow(self.bg, par=self.bf, name=self.data[0], cond_id=self.cond_id, par_id=self.par_id)
+        SelectionWindow(self.bg, par=self.bf, name=self.data[0], cond_id=self.cond_id, par_id=self.par_id, bf=self.bf)
         self.destroy()
     
     def click_delete_btn(self):
@@ -285,7 +277,7 @@ class ConditionsWindow(tk.Toplevel):
             self.destroy()
             return
         
-        SelectionWindow(bg=self.bg, par=self, name=name, par_id=self.par_id)
+        SelectionWindow(bg=self.bg, par=self, name=name, par_id=self.par_id, bf=self.bf)
     
     def next_frame(self, old_frame, new_frame):
         old_frame.destroy()
@@ -298,13 +290,14 @@ class ConditionsWindow(tk.Toplevel):
         
 
 class SelectionWindow(tk.Toplevel):
-    def __init__(self, bg = "", par = None, name = "", cond_id = "", par_id = "") -> None:
+    def __init__(self, bg = "", par = None, name = "", cond_id = "", par_id = "", bf = None) -> None:
         super().__init__(bg=bg)
         
         self.par = par
         self.bg = bg
         self.cond_id = cond_id
         self.par_id = par_id
+        self.bf = bf
         
         self.geometry("420x600+750+210")
         self.grab_set()
@@ -323,6 +316,8 @@ class SelectionWindow(tk.Toplevel):
     def create_selection_frame(self, master, name):
         if name == "ユーザー名":
             return UserNameFrameFirst(master, self.bg, data=[name, 0, 0, "", ""], sw=self, cond_id=self.cond_id, par_id=self.par_id)
+        if name == "変数":
+            return VarFrameFirst(master, self.bg, data=[name, 0, "", "", "", 0], sw=self, cond_id=self.cond_id, par_id=self.par_id, vars=self.bf.con.top_left_frame.global_var)
         return ttk.Frame(master, style="MYStyle.TFrame")
 
 
@@ -389,9 +384,75 @@ class UserNameFrameLast(SelectionFrame):
         self.sw.add_condition(self.data, self.cond_id, self.par_id)
         self.destroy()
         
+class VarFrameFirst(SelectionFrame):
+    
+    int_pre_conds = {"入力": True, "偶数": False, "奇数": False, "指定の倍数": True}
+    flaot_pre_conds = {"入力": True, "偶数": False, "奇数": False, "指定の倍数": True}
+    str_pre_conds = {"入力": True}
+    bool_pre_conds = {"True": False, "False": False}
+    
+    def __init__(self, master = None, bg = "", data = None, sw = None, cond_id = "", par_id = "", vars = []) -> None:
+        self.vars = vars
+        pre_conds = {}
+        for var in self.vars:
+            pre_conds[var] = False
+        super().__init__(master, bg, data, sw, pre_conds, "ユーザーを選択", cond_id, par_id)
+
+    def click_ok_btn(self):
+        index = self.check_list.index
+        ent_check_box:NEntryCheckBox = self.check_list.check_boxes[index]
+        self.data[1] = ent_check_box.text
+        type = self.vars[ent_check_box.text]["type"]
+        self.data[2] = type
+        next_pre_conds = {}
+        if type == "int":
+            next_pre_conds = self.int_pre_conds
+        if type == "flaot":
+            next_pre_conds = self.flaot_pre_conds
+        if type == "str":
+            next_pre_conds = self.str_pre_conds
+        if type == "bool":
+            next_pre_conds = self.bool_pre_conds
+        for var, var_data in self.vars.items():
+            if var_data["type"] != type:
+                continue
+            next_pre_conds[var] = False
+        self.sw.next_frame(self, VarFrameSecond(self.selection_win, bg=self.bg, data=self.data, sw=self.sw, cond_id=self.cond_id, par_id=self.par_id, pre_conds=next_pre_conds, vars=self.vars))
+
+class VarFrameSecond(SelectionFrame):
+    
+    def __init__(self, master = None, bg = "", data = None, sw = None, cond_id = "", par_id = "", pre_conds = {}, vars = {})-> None:
+        super().__init__(master, bg, data, sw, pre_conds, "ユーザーを選択", cond_id, par_id)
+        self.vars = vars
+    
+    def click_ok_btn(self):
+        index = self.check_list.index
+        ent_check_box:NEntryCheckBox = self.check_list.check_boxes[index]
+        if ent_check_box.hasEntry:
+            ent_text = ent_check_box.entry.get()
+            if ent_text == "":
+                messagebox.showerror("エラー", "空白です")
+                return
+            self.data[4] = ent_text
+        if ent_check_box.text in self.vars:
+            self.data[3] = ent_check_box.text
+        else:
+            self.data[3] = index
+        self.sw.next_frame(self, VarFrameLast(self.selection_win, bg=self.bg, data=self.data, sw=self.sw, cond_id=self.cond_id, par_id=self.par_id))
+
+class VarFrameLast(SelectionFrame):
+    pre_conds = {"等しい": False, "異なる": False, "よりも小さい": False, "よりも大きい": False, "よりも小さい": False, "以下": False, "以上": False, "含まれる": False, "含まれない": False}
+    
+    def __init__(self, master = None, bg = "", data = None, sw = None, cond_id = "", par_id = "") -> None:
+        super().__init__(master, bg, data, sw, self.pre_conds, "ユーザーを選択", cond_id, par_id)
+    
+    def click_ok_btn(self):
+        index = self.check_list.index
+        self.data[5] = index
+        self.sw.add_condition(self.data, self.cond_id, self.par_id)
+        self.destroy()
         
 class PreCondFrame(ttk.Frame):
-    
     def __init__(self, master = None, data = []) -> None:
         super().__init__(master, style="MYStyle.TFrame")
         precond = PreferenceConditions(data)
@@ -421,6 +482,49 @@ class PreferenceConditions():
             if data[4] != "":
                 user2 = user2 + "\n入力: " + data[4]
             self.detail["ユーザー2"] = user2  +"\n"
+        
+        if self.name == "変数":
+            self.detail["説明"] = "[変数]が[値] [比較]かったらTrueを返します"
+            self.content += data[1]
+            self.detail["変数"] = data[1] +"\n"
+            var_type = data[2]
+            cond = data[5] 
+            if cond == 0:
+                self.content += "=="
+            elif cond == 1:
+                self.content += "!="
+            elif cond == 2 and var_type not in ("bool"):
+                self.content += "<"
+            elif cond == 3 and var_type not in ("bool"):
+                self.content += ">"
+            elif cond == 4 and var_type not in ("bool"):
+                self.content += ">="
+            elif cond == 5 and var_type not in ("bool"):
+                self.content += "<="
+            elif cond == 6 and var_type not in ("bool", "int", "flaot"):
+                self.content += " in "
+            elif cond == 7 and var_type not in ("bool", "int", "flaot"):
+                self.content += " not in "
+            else:
+                cond = 0
+                self.content += "=="
+            cond = list(VarFrameLast.pre_conds.keys())[cond]
+            val = data[3]
+            if type(val) == int:
+                if var_type == "int":
+                    val = list(VarFrameFirst.int_pre_conds.keys())[val]
+                if var_type == "flaot":
+                    val = list(VarFrameFirst.int_pre_conds.keys())[val]
+                if var_type == "str":
+                    val = list(VarFrameFirst.int_pre_conds.keys())[val]
+                if var_type == "bool":
+                    val = list(VarFrameFirst.int_pre_conds.keys())[val]
+            self.content += val 
+            if data[4] != "":
+                val = val + "\n入力: " + data[4]
+             
+            self.detail["値"] = val +"\n"
+            self.detail["比較"] = cond +"\n"
         
 """
     VarBranchFrameの説明

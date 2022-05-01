@@ -1,8 +1,5 @@
 
 
-from sympy import false
-
-
 def type_change(type, val):
     try:
         if type == "str":

@@ -1,8 +1,6 @@
 from tkinter import ttk, messagebox
 import tkinter as tk
 import os
-
-from matplotlib import style
 import work
 import json
 import yaml
@@ -143,53 +141,28 @@ class BotTkuuuru():
         self.show_frame("Work")
     
     def click_close_btn(self):
+        #WorkFrameを開いてる時だけ保存するか聞きたっかった
         if "Work" not in self.frames:
             self.root.destroy()
             return
-        self.show_conf_win(self.root.destroy)
+        self.conf_win = SaveConfirmationWindow(self.defalt_bg, self.root.destroy, self.save)
     
-    def show_conf_win(self, func):
-        self.conf_win = tk.Toplevel(bg=self.defalt_bg)
-        self.conf_win.title("確認")
-        self.conf_win.geometry("300x100+810+490")
-        self.conf_win.grab_set()
-        description_lab = ttk.Label(self.conf_win, text="閉じる前に変更を保存しますか?", style="MYStyle.TLabel")
-        
-        save_btn = ttk.Button(
-            self.conf_win, text="保存する", 
-            command=lambda: self.save(func),
-            style="Close.TButton")
-        
-        not_save_btn = ttk.Button(
-            self.conf_win, text="保存しない", 
-            command=func, 
-            style="Close.TButton")
-        
-        cancel_btn = ttk.Button(
-            self.conf_win, text="キャンセル", 
-            command=lambda: self.conf_win.destroy(), 
-            style="Close.TButton")
-        
-        description_lab.grid(row=0, column=0, columnspan=3, pady=10)
-        save_btn.grid(row=1, column=0, padx=10)
-        not_save_btn.grid(row=1, column=1, padx=10)
-        cancel_btn.grid(row=1, column=2, padx=10)
-    
-    def save(self, func):
-        self.frames["Work"].top_left_frame.save(conf=False)
-        func()
-        
     def might_show_win(self, name):
+        #WorkFrameを開いてる時だけ保存するか聞きたっかった
         if "Work" not in self.frames:
             self.show_frame(name)
             return
-        self.show_conf_win(lambda:self._wd_sf(name))
+        self.conf_win = SaveConfirmationWindow(self.defalt_bg, lambda:self._work_destroy_to_show_frame(name), self.save)
     
-    def _wd_sf(self, name):
+    def _work_destroy_to_show_frame(self, name):
         self.frames["Work"].destroy()
         self.frames.pop("Work")
         self.conf_win.destroy()
         self.show_frame(name)
+    
+    def save(self, func):
+        self.frames["Work"].top_left_frame.save(conf=False)
+        func()
         
     def show_frame(self, name):
         frame = self.frames[name]
@@ -199,7 +172,35 @@ class BotTkuuuru():
         setting_win = Setting(self, self.defalt_bg)
         setting_win.geometry("450x600")
         setting_win.grab_set()
+
+class SaveConfirmationWindow(tk.Toplevel):
+    def __init__(self, bg = "", func = None, save_func = None) -> None:
+        super().__init__(bg=bg)
         
+        self.title("確認")
+        self.geometry("300x100+810+490")
+        self.grab_set()
+        description_lab = ttk.Label(self, text="閉じる前に変更を保存しますか?", style="MYStyle.TLabel")
+        
+        save_btn = ttk.Button(
+            self, text="保存する", 
+            command=lambda: save_func(func),
+            style="Close.TButton")
+        
+        not_save_btn = ttk.Button(
+            self, text="保存しない", 
+            command=func,
+            style="Close.TButton")
+        
+        cancel_btn = ttk.Button(
+            self, text="キャンセル", 
+            command=lambda: self.destroy(), 
+            style="Close.TButton")
+        
+        description_lab.grid(row=0, column=0, columnspan=3, pady=10)
+        save_btn.grid(row=1, column=0, padx=10)
+        not_save_btn.grid(row=1, column=1, padx=10)
+        cancel_btn.grid(row=1, column=2, padx=10)
         
         
 class StartFrame(ttk.Frame):

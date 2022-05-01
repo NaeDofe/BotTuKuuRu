@@ -8,7 +8,8 @@ class VarFrame(NodeDetail):
         if not any(data):
             self.data = ["",[]]
         
-        self.vars =  self.con.top_left_frame.variables
+        self.vars = {**self.con.top_left_frame.global_var,
+                     **self.con.right_command_frame.commands[self.command_name]["vars"]}
         
         if self.data[0] in self.vars:
             self.frame = self._get_type_frame()
@@ -126,8 +127,9 @@ class VarIntFrame(VarNodeDetail):
         val = self.val_ent.get()
         seme = self.seme_com.get()
         odm =  conv.odm(val)
+        print(odm)
         types = conv.get_var_type(val, self.vf.vars)
-        
+        print(types)
         if seme not in self.seme_texts:
             messagebox.showerror("エラー", "設定方法がうまく設定されていません")
             return
@@ -138,15 +140,12 @@ class VarIntFrame(VarNodeDetail):
         if not messagebox.askyesno("確認", "変更を保存しますか？"):
             return
         
-        if seme == self.seme_texts[0]:
-            seme = 0
-        elif seme == self.seme_texts[1]:
-            seme = 1
+        seme = self.seme_texts.index(seme)
         
-        self.command_tree.item(self.node_id, tags="")
-        self.command_frame.commands[self.command_name]["nodes"][self.node_id]["data"][1] = [val, seme]
-        self.need_save_lab["text"] = ""
-        self.isSave = True
+        self.command_tree.item(self.node_id, tags="") 
+        self.command_frame.commands[self.command_name]["nodes"][self.node_id]["data"][1] = [val, seme] 
+        self.need_save_lab["text"] = "" 
+        self.isSave = True 
 
 class VarFloatFrame(VarNodeDetail):
     
@@ -204,15 +203,13 @@ class VarFloatFrame(VarNodeDetail):
         if not messagebox.askyesno("確認", "変更を保存しますか？"):
             return
         
-        if seme == self.seme_texts[0]:
-            seme = 0
-        elif seme == self.seme_texts[1]:
-            seme = 1
+        seme = self.seme_texts.index(seme)
         
-        self.command_tree.item(self.node_id, tags="")
-        self.command_frame.commands[self.command_name]["nodes"][self.node_id]["data"][1] = [val, seme, str(isRightness)]
-        self.need_save_lab["text"] = ""
-        self.isSave = True
+        self.command_tree.item(self.node_id, tags="") 
+        self.command_frame.commands[self.command_name]["nodes"][self.node_id]["data"][1] = [val, seme, str(isRightness)] 
+        self.need_save_lab["text"] = "" 
+        self.isSave = True 
+        
         
         
 class VarStringFrame(VarNodeDetail):
@@ -261,15 +258,12 @@ class VarStringFrame(VarNodeDetail):
         if not messagebox.askyesno("確認", "変更を保存しますか？"):
             return
         
-        if seme == self.seme_texts[0]:
-            seme = 0
-        elif seme == self.seme_texts[1]:
-            seme = 1
+        seme = self.seme_texts.index(seme)
         
-        self.command_tree.item(self.node_id, tags="")
-        self.command_frame.commands[self.command_name]["nodes"][self.node_id]["data"][1] = [val, seme]
-        self.need_save_lab["text"] = ""
-        self.isSave = True
+        self.command_tree.item(self.node_id, tags="") 
+        self.command_frame.commands[self.command_name]["nodes"][self.node_id]["data"][1] = [val, seme] 
+        self.need_save_lab["text"] = "" 
+        self.isSave = True 
 
 class VarBoolFrame(VarNodeDetail):
     
@@ -288,7 +282,7 @@ class VarBoolFrame(VarNodeDetail):
         self.seme_lab = NLable(self, text="設定方法", style="MYStyle.TLabel")
         self.seme_com = NCombobox(self, values=self.seme_texts, text=same)
         
-        var_names =  [name for name in self.con.top_left_frame.variables.keys()]
+        var_names =  [name for name in self.con.top_left_frame.global_var.keys()]
         self.var_name_lab = NLable(self, text="変数名", style="MYStyle.TLabel")
         self.var_name_com = NCombobox(self, values=var_names, text=detail_data[0])
         
@@ -315,15 +309,11 @@ class VarBoolFrame(VarNodeDetail):
             messagebox.showerror("エラー", "設定方法がうまく設定されていません")
             return
         
-        if seme == self.seme_texts[0]:
-            seme = 0
-        elif seme == self.seme_texts[1]:
-            seme = 1
-        elif seme == self.seme_texts[2]:
-            seme = 2
-        elif seme == self.seme_texts[3]:
+        seme = self.seme_texts.index(seme)
+        
+        if seme == 3:
             seme = 3
-            var_names = [name for name in self.con.top_left_frame.variables.keys()]
+            var_names = [name for name in self.con.top_left_frame.global_var.keys()]
             if val not in var_names:
                 messagebox.showerror("エラー", "変数名が間違っています")
                 return
@@ -331,8 +321,9 @@ class VarBoolFrame(VarNodeDetail):
         if not messagebox.askyesno("確認", "変更しますか？"):
             return
         
-        self.command_tree.item(self.node_id, tags="")
-        self.command_frame.commands[self.command_name]["nodes"][self.node_id]["data"][1] = [val, seme]
-        self.need_save_lab["text"] = ""
-        self.isSave = True
+        self.command_tree.item(self.node_id, tags="") 
+        self.command_frame.commands[self.command_name]["nodes"][self.node_id]["data"][1] = [val, seme] 
+        self.need_save_lab["text"] = "" 
+        self.isSave = True 
+        
  

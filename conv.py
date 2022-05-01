@@ -22,8 +22,10 @@ def _option_conv(option, options):
     option_name = option.split("=")[0]
     val = option.split("=")[1]
     
-    if option_name == "v":
+    if option_name == "vg":
         val = _val_to_variable(val, options["vars"])
+    if option_name == "vl":
+        val = _val_to_variable(val, options["local_vars"])
     if option_name == "m":
         val = _val_to_message(val, options["message"])
     if option_name == "t":
@@ -88,8 +90,12 @@ def _option_to_type(option, vars):
     option_name = option.split("=")[0]
     var_name = option.split("=")[1]
     type = ""
-    if option_name == "v":
+    if option_name in ("vg", "vl"):
         type = vars[var_name]["type"]
+    if option_name == "t":
+        if var_name == "dow":
+            return "str"
+        type = "int"
     return type
 
 def odm(msg):

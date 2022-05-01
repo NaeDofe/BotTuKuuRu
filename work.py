@@ -8,6 +8,7 @@ import os
 import threading
 import subprocess
 import yaml
+import copy
 
 class WorkFrame(ttk.Frame):
     
@@ -26,8 +27,8 @@ class WorkFrame(ttk.Frame):
         self.bottom_left_frame = BottomLeftFrame(master=self)
         self.top_left_frame = TopLeftFrame(master=self)
         
-        self.bottom_left_frame.create_copre_frame()
-        self.bottom_left_frame.set_node_frame()
+        #VarFrameでtop_left_frameを使うから
+        self.bottom_left_frame.initial_setting_node_frame()
         
         self.right_command_frame.grid(row=0, column=1, rowspan=2, sticky=tk.NSEW)
         
@@ -81,36 +82,68 @@ class TopLeftFrame(ttk.Frame):
         self.mode_lbl.pack()
         self.selection_node_lbl.pack()
         
-        self.var_tree = ttk.Treeview(self)
-        self.var_tree['columns'] = ('ID','Name','Score')
-        self.var_tree.column('#0',width=0, stretch='no')
-        self.var_tree.column('ID', anchor='center', width=60)
-        self.var_tree.column('Name',anchor='w', width=100)
-        self.var_tree.column('Score', anchor='center', width=80)
+        self.var_note = ttk.Notebook(self)
         
-        self.var_tree.heading('#0',text='')
-        self.var_tree.heading('ID', text='型',anchor='center')
-        self.var_tree.heading('Name', text='名前', anchor='w')
-        self.var_tree.heading('Score',text='初期値', anchor='center')
+        self.var_tree = self._create_var_tree(self.var_note, "global")
         
-        self.variables = {}
-        self._file_to_tree()
-        self.var_tree.bind("<<TreeviewSelect>>", self.select_var_tree)
-        self.var_tree.grid(row=0, column=4, rowspan=6)
+        self.global_var = {}
+        self._var_file_to_tree()
+        self.var_tree.bind("<<TreeviewSelect>>", self.select_var_tree_item)
+        self.var_tree.pack()
+        self.var_note.add(self.var_tree, text="global")
+        
+        self._vars_to_tree_local()
+        
+        self.var_note.grid(row=0, column=4, rowspan=6)
+        
         
         self.bottom.show_frame("Empty")
     
-    def _file_to_tree(self):
+    def _create_var_tree(self, master, name):
+        tree = ttk.Treeview(master)
+        tree['columns'] = ('ID','Name','Score')
+        tree.column('#0',width=0, stretch='no')
+        tree.column('ID', anchor='center', width=60)
+        tree.column('Name',anchor='w', width=100)
+        tree.column('Score', anchor='center', width=80)
+            
+        tree.heading('#0',text=name)
+        tree.heading('ID', text='型',anchor='center')
+        tree.heading('Name', text='名前', anchor='w')
+        tree.heading('Score',text='初期値', anchor='center')
+        return tree
+    
+    def _var_file_to_tree(self):
         for name, vals in self.con.file["vars"].items():
             self.var_tree.insert(parent='', index='end', values=(vals[0], name, vals[1]))
             frame = VariableDetailFrame(master=self.bottom, top=self, var_name=name, var_type=vals[0], var_default=vals[1])
             frame.grid(row=0, column=0, sticky="nsew")
-            self.variables[name] = {"type":vals[0], "val":vals[1], "frame": frame}
-        
-    def select_var_tree(self, event):
-        self.selected_var_id = self.var_tree.focus()
-        name = self.var_tree.item(self.selected_var_id, "values")[1]
-        self.bottom.show_varpre_frame(name)
+            self.global_var[name] = {"type":vals[0], "val":vals[1], "frame": frame}
+    
+    def _vars_to_tree_local(self):
+        for command_name, data_dic in self.con.file["commands"].items():
+            vars = data_dic["vars"]
+            self.set_local_vars(vars, command_name)
+            
+    def set_local_vars(self, vars, command_name):
+        tree = self._create_var_tree(self.var_note, command_name)
+        self.command.commands[command_name]["var_tree"] = tree
+        for name, vals in vars.items():
+            tree.insert(parent='', index='end', values=(vals[0], name, vals[1]))
+            frame = VariableDetailFrame(master=self.bottom, top=self, var_name=name, var_type=vals[0], var_default=vals[1], par_name=command_name)
+            frame.grid(row=0, column=0, sticky="nsew")
+            self.command.commands[command_name]["vars"][name] = {"type":vals[0], "val":vals[1], "frame": frame}
+        tree.bind("<<TreeviewSelect>>",self.select_var_tree_item)
+        tree.pack()
+        self.var_note.add(tree, text="local: "+ command_name)
+    
+    
+    def select_var_tree_item(self, event):
+        tree = event.widget
+        self.selected_var_id = tree.focus()
+        name = tree.item(self.selected_var_id, "values")[1]
+        command_name = tree.heading("#0", "text")
+        self.bottom.show_varpre_frame(name, command_name)
         
     def execution(self):
         if self.bot_is_run:
@@ -134,10 +167,11 @@ class TopLeftFrame(ttk.Frame):
     
     def _bot_run(self):
         self.bot_is_run = True
-        subprocess.call("py bot.py")
+        subprocess.call('start /wait py bot.py', shell=True)
         self.bot_is_run = False
     
     def save(self, conf = True):
+        #確認がいらない場合があるから
         if conf:
             if not messagebox.askyesno("確認", "ファイルを保存しますか?"):
                 return False
@@ -147,10 +181,12 @@ class TopLeftFrame(ttk.Frame):
         command_dic = {}
         for command_name, command_data in commands.items():
             command_tree = command_data["tree"]
-            command_dic[command_name] = self._tree_to_dict(command_tree, "", command_name)
+            command_dic[command_name] = {"nodes": self._tree_to_dict(command_tree, "", command_name)}
+            command_dic[command_name]["vars"] = self._variables_to_file_data(commands[command_name]["vars"])
+
         
         self.con.file["commands"] = command_dic
-        self.con.file["vars"] = self._variables_to_file_data()
+        self.con.file["vars"] = self._variables_to_file_data(self.global_var)
         self.con.file["token"] = self.con.token
         self.con.file["prefix"] = self.con.prefix
         
@@ -167,9 +203,9 @@ class TopLeftFrame(ttk.Frame):
             dic[item] = [name, self._tree_to_dict(tree, item, command_name), data ]
         return dic
 
-    def _variables_to_file_data(self):
+    def _variables_to_file_data(self, vars):
         dic = {}
-        for name, data in self.variables.items():
+        for name, data in vars.items():
             dic[name] = [data["type"], data["val"]]
         return dic
         
@@ -201,6 +237,9 @@ class RightCommandFrame(ttk.Frame):
         self.file = file
         
         self.commands = {}
+        self.undo_nodes = {}
+        self.undo_index = 1
+        self.redo_index = 1
         self.copy_nodes = None
         self.selected_id = ""
         self.now_command_name = ""
@@ -208,28 +247,45 @@ class RightCommandFrame(ttk.Frame):
         self.command_note = ttk.Notebook(self)
         self.command_note.bind("<<NotebookTabChanged>>", self.tab_changed)
         self.command_note.bind("<ButtonRelease-1>", self.tab_click)
-        self._file_to_commad()
+        
+        #ctrl-zを使うとTreeviewが変わって毎回クリックしないといけなくなるからallにしてる
+        self.command_note.bind_all("<Control-z>", self.undo)
+        self.command_note.bind_all("<Control-Shift-Key-Z>", self.redo)
+        
+        self._file_to_commad_tree()
         self.command_note.pack(fill="both", side="right")
     
-    def _file_to_commad(self):
+    def _file_to_commad_tree(self):
         for command_name, data_dic in self.file["commands"].items():
+            node_deta = data_dic["nodes"]
+            
             self.commands[command_name] = {}
-            command_tree = ttk.Treeview(self.command_note, height=30)
-            command_tree.column("#0", width=500)
+            self.undo_nodes[command_name] = []
+            tree_frame = ttk.Frame(self.command_note, style="MYStyle.TFrame")
+            command_tree = ttk.Treeview(tree_frame, height=100)
+            scrollbar = ttk.Scrollbar(tree_frame, orient = tk.VERTICAL, command=command_tree.yview)
+            command_tree.configure(yscrollcommand=lambda f, l: scrollbar.set(f, l))
+            
+            command_tree.column("#0", width=600)
             command_tree.heading("#0", text=command_name)
-            self.commands[command_name]["nodes"] = {}
-            self._file_to_tree(command_tree, "", data_dic, command_name)
             command_tree.bind("<<TreeviewSelect>>", self.select_node)
             command_tree.bind("<Control-c>", self.copy)
             command_tree.bind("<Control-v>", self.paste)
             command_tree.bind("<Control-d>", self.deletion)
             command_tree.bind("<Control-s>", self.node_save)
             command_tree.tag_configure("not_save", foreground=self.con.bt.not_save_color)
-            command_tree.pack(fill="x")
+            self.commands[command_name]["nodes"] = {}
+            self._command_file_to_tree(command_tree, "", node_deta, command_name)
+            command_tree.pack(fill="both", side="left")
+            scrollbar.pack(fill="y", side="left")
             self.commands[command_name]["tree"] = command_tree
-            self.command_note.add(command_tree, text=command_name)
+            self.commands[command_name]["tree_frame"] = tree_frame
+            self.commands[command_name]["scrollbar"] = scrollbar
+            self.commands[command_name]["vars"] = {}
+            self.commands[command_name]["var_tree"] = {}
+            self.command_note.add(tree_frame, text=command_name)
         
-    def _file_to_tree(self, tree, parent, data_dic, command_name):
+    def _command_file_to_tree(self, tree, parent, data_dic, command_name):
         for val in data_dic.values():
             
             node_name = val[0]
@@ -237,10 +293,12 @@ class RightCommandFrame(ttk.Frame):
             node_data = val[2]
             
             node_id = tree.insert(parent=parent, index="end", text=node_name)
+            tree.item(node_id, open=True)
             self.commands[command_name]["nodes"][node_id] = {"name": node_name, "data": node_data}
             
             if any(child_data):
-                self._file_to_tree(tree, node_id, child_data, command_name)
+                self._command_file_to_tree(tree, node_id, child_data, command_name)
+    
     
     def show_node_frame(self, node_id):
         frame = self.commands[self.now_command_name]["nodes"][node_id]["frame"]
@@ -273,6 +331,7 @@ class RightCommandFrame(ttk.Frame):
             return
         
         if mode == 1:
+            self.con.bottom_left_frame.save_command_nodes()
             index = tree.index(item_id)
             tree.move(self.selected_id, item_parent, index)
             self.selected_id = ""
@@ -280,6 +339,7 @@ class RightCommandFrame(ttk.Frame):
             
         if mode == 2:
             if self.selected_id != item_id:
+                self.con.bottom_left_frame.save_command_nodes()
                 tree.move(self.selected_id, item_id, "end")
                 tree.item(item_id, open=True)
             self.selected_id = ""
@@ -299,13 +359,12 @@ class RightCommandFrame(ttk.Frame):
             return
         self.now_command_name = self.command_note.tab(select_id, "text")
         
-    
     def tab_click(self, event):
-        select_id = self.command_note.select() 
+        select_id = self.command_note.select()
         if select_id == "":
             return
         self.now_command_name = self.command_note.tab(select_id, "text")
-        self.con.bottom_left_frame.show_copre_frame(self.now_command_name)
+        self.con.bottom_left_frame.show_command_detail_frame(self.now_command_name)
     
     def copy(self, event):
         tree: ttk.Treeview = self.commands[self.now_command_name]["tree"]
@@ -346,7 +405,8 @@ class RightCommandFrame(ttk.Frame):
         if any(item_ids):
             defa_par = tree.parent(item_ids[-1])
         new_pars = {}
-            
+        
+        self.con.bottom_left_frame.save_command_nodes()
         for node_id, data in self.copy_nodes.items():
             node_setting = data["setting"]
             parent = data["parent"]
@@ -374,9 +434,11 @@ class RightCommandFrame(ttk.Frame):
         if not messagebox.askyesno("確認", "選択されているすべてのノードを削除しますか?"):
             return
         
+        self.con.bottom_left_frame.save_command_nodes()
         for node_id in  reversed(node_ids):
             frame = self.commands[self.now_command_name]["nodes"][node_id]["frame"]
             frame.delete_node(conf=False)
+        
     
     def node_save(self, event):
         tree: ttk.Treeview = self.commands[self.now_command_name]["tree"]
@@ -386,10 +448,65 @@ class RightCommandFrame(ttk.Frame):
         if not messagebox.askyesno("確認", "選択されているノードの変更をすべて保存しますか?"):
             return
         
+        #self.con.bottom_left_frame.save_command_nodes()
         for node_id in  node_ids:
             frame = self.commands[self.now_command_name]["nodes"][node_id]["frame"]
             frame.change_node()
-
+        
+         
+    def undo(self, event):
+        if len(self.undo_nodes[self.now_command_name])>= self.undo_index:
+            if self.undo_index == 1:
+                self.con.bottom_left_frame.save_command_nodes()
+                self.undo_index += 1
+            self._node_data_to_tree(self.undo_nodes[self.now_command_name][-self.undo_index])
+            self.undo_index += 1
+            self.redo_index += 1
+            
+    def redo(self, event):
+        if self.redo_index > 1:
+            self.redo_index -= 1
+            self.undo_index -= 1
+            self._node_data_to_tree(self.undo_nodes[self.now_command_name][-self.redo_index])
+            
+    def _node_data_to_tree(self, nodes_data):
+        command_name = self.now_command_name
+        
+        self.commands[command_name]["tree"].destroy()
+        self.commands[command_name]["scrollbar"].destroy()
+        
+        for datas in self.commands[command_name]["nodes"].values():
+            datas["frame"].destroy()
+        
+        tree_frame = self.commands[command_name]["tree_frame"]
+        
+        self.commands[command_name] = {}
+        self.commands[command_name]["tree_frame"] = tree_frame
+        
+        """スクロールバーに帰るがんばれ未来に自分俺はご飯を食べるbye!!
+        """
+        
+        command_tree = ttk.Treeview(tree_frame, height=100)
+        scrollbar = ttk.Scrollbar(tree_frame, orient = tk.VERTICAL, command=command_tree.yview)
+        command_tree.configure(yscrollcommand=lambda f, l: scrollbar.set(f, l))
+        command_tree.column("#0", width=600)
+        command_tree.heading("#0", text=command_name)
+        self.commands[command_name]["nodes"] = {}
+        self._command_file_to_tree(command_tree, "", nodes_data, command_name)
+        command_tree.bind("<<TreeviewSelect>>", self.select_node)
+        command_tree.bind("<Control-c>", self.copy)
+        command_tree.bind("<Control-v>", self.paste)
+        command_tree.bind("<Control-d>", self.deletion)
+        command_tree.bind("<Control-s>", self.node_save)
+        command_tree.tag_configure("not_save", foreground=self.con.bt.not_save_color)
+        command_tree.pack(fill="both", side="left")
+        scrollbar.pack(fill="y", side="left")
+        self.commands[command_name]["tree"] = command_tree
+        self.commands[command_name]["scrollbar"] = scrollbar
+        
+        
+        self.con.bottom_left_frame.initial_setting_node_frame()
+        
 class BottomLeftFrame(ttk.Frame):
     def __init__(self, master: WorkFrame = None):
         super().__init__(master, style="MYStyle.TFrame")
@@ -406,13 +523,14 @@ class BottomLeftFrame(ttk.Frame):
         self.frames["Detail"] = DetailedPreference(master=self, con=self.con)
         self.frames["Variable"] = AddVariableFrame(master=self, con=self.con)
         
-        
         for frame in self.frames.values():
             frame.grid(row=0, column=0, sticky="nsew")
             
         self.show_frame("Empty")
         
-    def set_node_frame(self):
+        self.create_command_detail_frame()
+        
+    def initial_setting_node_frame(self):
         for command_name, command_data in self.command_frame.commands.items():
             node_settings = command_data["nodes"]
             for node_id, datas in node_settings.items():
@@ -429,12 +547,15 @@ class BottomLeftFrame(ttk.Frame):
             return nodede.SendMessageFrame(self, self.command_frame, command_name, node_id, data)
         elif node_name == "変数の設定":
             return variable.VarFrame(self, self.command_frame, command_name, node_id, data)
-        elif node_name == "条件分岐" or node_name == "Else If":
+        elif node_name in ("条件分岐", "Else If", "条件を満たす限り繰り返す"):
             return branch.BranchFrame(self, self.command_frame, command_name, node_id, data)
-        elif node_name == "Else":
-            return branch.ElseFrame(self, self.command_frame, command_name, node_id, data)
-    
-    def create_copre_frame(self):
+        elif node_name in ("Else", "Break", "Continue"):
+            return nodede.EmptyFrame(self, self.command_frame, command_name, node_id, data)
+        elif node_name == "一定回数繰り返す":
+            return nodede.ForFrame(self, self.command_frame, command_name, node_id, data)
+        elif node_name == "メッセージを削除":
+            return nodede.ClearMessageFrame(self, self.command_frame, command_name, node_id, data)
+    def create_command_detail_frame(self):
         for command_name in self.command_frame.commands.keys():
             self.command_frame.commands[command_name]["frame"] = CommandDetailFrame(self, self.command_frame, command_name)
             self.command_frame.commands[command_name]["frame"].grid(row=0, column=0, sticky="nsew")
@@ -443,16 +564,47 @@ class BottomLeftFrame(ttk.Frame):
         frame = self.frames[name]
         frame.tkraise()
     
-    def show_varpre_frame(self, name):
-        variables = self.con.top_left_frame.variables
+    def show_varpre_frame(self, name, command_name = "global"):
+        global_var = self.con.top_left_frame.global_var
+        if command_name == "global":
+            variables = global_var
+        else:
+            local_var = self.command_frame.commands[command_name]["vars"]
+            variables = {**global_var, **local_var}
         frame = variables[name]["frame"]
         frame.tkraise()
     
-    def show_copre_frame(self, name):
+    def show_command_detail_frame(self, name):
         if "frame" not in self.command_frame.commands[name]:
             return
         frame = self.command_frame.commands[name]["frame"]
         frame.tkraise()
+    
+    def save_command_nodes(self):
+        command_name = self.command_frame.now_command_name
+        MAX_UNDO = 30
+        nodes_detas = {}
+        for node_id, node_datas in self.command_frame.commands[command_name]["nodes"].items():
+            nodes_detas[node_id] = {"data": copy.deepcopy(node_datas["data"]), "name": copy.deepcopy(node_datas["name"])}
+        tree = self.command_frame.commands[command_name]["tree"]
+        nodes_detas = self._node_data_to_dict(tree, "", nodes_detas)
+        if self.command_frame.undo_index > 1:
+            del self.command_frame.undo_nodes[command_name][-(self.command_frame.undo_index-1):]
+        self.command_frame.undo_nodes[command_name].append(nodes_detas)
+        if len(self.command_frame.undo_nodes[command_name]) > MAX_UNDO:
+            self.command_frame.undo_nodes[command_name].pop(0)
+        self.command_frame.undo_index = 1
+        self.command_frame.redo_index = 1
+    
+    def _node_data_to_dict(self, tree, parent, nodes_data):
+        dic = {}
+        for item in tree.get_children(parent):
+            name = nodes_data[item]["name"]
+            data = nodes_data[item]["data"]
+            dic[item] = [name, self._node_data_to_dict(tree, item, nodes_data), data]
+        return dic
+        
+        
         
 class AddNodeFrame(ttk.Frame):
     def __init__(self, master: BottomLeftFrame = None, command_frame: RightCommandFrame = None):
@@ -485,6 +637,12 @@ class AddNodeFrame(ttk.Frame):
             return
         if not messagebox.askyesno(title="追加の確認", message=f"{item_name}を追加しますか?"):
             return
+        command_name = self.command_frame.now_command_name
+        if command_name == "":
+            messagebox.showerror("エラー", "コマンドが選択されていません")
+            return
+        
+        self.bottom.save_command_nodes()
         
         command_name = self.command_frame.now_command_name
         tree = self.command_frame.commands[command_name]["tree"]
@@ -493,8 +651,9 @@ class AddNodeFrame(ttk.Frame):
         frame = self.bottom.create_node_frame(command_name, node_id, item_name, [])
         frame.Ngrid(row=0, column=0, sticky="nsew")
         self.command_frame.commands[command_name]["nodes"][node_id] = {"name": item_name, "data": frame.data, "frame": frame}
-        
-
+    
+    
+    
 class CommandSettingFrame(ttk.Frame):
     def __init__(self, master = None, command_frame: RightCommandFrame = None):
         super().__init__(master, style="MYStyle.TFrame")
@@ -524,8 +683,14 @@ class CommandDetailFrame(CommandSettingFrame):
         if not messagebox.askyesno("確認", "変更を保存しますか?"):
             return
         
+        self.command_frame.now_command_name = ""
         self.command_frame.command_note.forget(self.command_frame.command_note.select())
+        for datas in self.command_frame.commands[self.command_name]["nodes"].values():
+            datas["frame"].destroy()
+        self.command_frame.commands[self.command_name]["tree"].destroy()
+        self.command_frame.commands[self.command_name]["var_tree"].destroy()
         self.command_frame.commands.pop(self.command_name)
+        self.destroy()
     
     def change_command(self):
         name = self.name_ent.get()
@@ -541,13 +706,25 @@ class CommandDetailFrame(CommandSettingFrame):
 
         if not messagebox.askyesno("確認", "変更を保存しますか?"):
             return
-            
+        
+        
+        
+        #この下どうにか下noteの名前が変わるようにしてください！ご飯食べてくる！！bye
         self.command_frame.command_note.tab(self.command_frame.command_note.select(), text=name)
         self.command_frame.commands[name] = self.command_frame.commands.pop(self.command_name)
+        self.command_frame.undo_nodes[name] =  self.command_frame.undo_nodes.pop(self.command_name)
+        self.command_frame.con.top_left_frame.var_note.tab(str(self.command_frame.commands[name]["var_tree"]), text="local: "+name)
+        self.command_frame.commands[name]["var_tree"].heading('#0', text=name)
         self.command_frame.commands[name]["tree"].heading('#0', text=name)
+        for var_data in self.command_frame.commands[name]["vars"].values():
+            var_data["frame"].par_name = name
+        for node_data in self.command_frame.commands[name]["nodes"].values():
+            node_data["frame"].command_name = name
+        self.command_name = name
+        self.command_frame.now_command_name = name
         
-        
-        
+        self.command_frame.con.bottom_left_frame.frames["Variable"].update_dest()
+           
 class AddCommandFrame(CommandSettingFrame):
     def __init__(self, master = None, command_frame: RightCommandFrame = None):
         super().__init__(master, command_frame)
@@ -569,19 +746,33 @@ class AddCommandFrame(CommandSettingFrame):
             return
         
         frame = ttk.Frame(self.command_frame.command_note)
-        tree = ttk.Treeview(frame, height=30)
-        tree.column("#0", width=500)
+        tree = ttk.Treeview(frame, height=100)
+        scrollbar = ttk.Scrollbar(frame, orient = tk.VERTICAL, command=tree.yview)
+        tree.configure(yscrollcommand=lambda f, l: scrollbar.set(f, l))
+        tree.column("#0", width=600)
         tree.heading("#0", text=name)
         tree.bind("<<TreeviewSelect>>", self.command_frame.select_node)
         tree.bind("<Control-c>", self.command_frame.copy)
         tree.bind("<Control-v>", self.command_frame.paste)
         tree.bind("<Control-d>", self.command_frame.deletion)
         tree.bind("<Control-s>", self.command_frame.node_save)
-        tree.pack(fill="x")
+        tree.pack(fill="both", side="left")
+        scrollbar.pack(fill="y", side="left")
+        self.command_frame.undo_nodes[name] = []
         self.command_frame.commands[name] = {}
         self.command_frame.command_note.add(frame, text=name)
+        self.command_frame.commands[name]["frame"] = CommandDetailFrame(self.command_frame.con.bottom_left_frame, self.command_frame, name)
+        self.command_frame.commands[name]["tree_frame"] = frame
         self.command_frame.commands[name]["tree"] = tree
+        self.command_frame.commands[name]["vars"] = {}
+        self.command_frame.commands[name]["var_tree"] = {}
         self.command_frame.commands[name]["nodes"] = {}
+        self.command_frame.commands[name]["frame"].grid(row=0, column=0, sticky="nsew")
+        self.command_frame.con.top_left_frame.set_local_vars({}, name)
+        
+        self.command_frame.con.bottom_left_frame.frames["Variable"].update_dest()
+
+
 
 class DetailedPreference(ttk.Frame):
     def __init__(self, master: WorkFrame = None, con: WorkFrame = None):
