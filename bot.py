@@ -48,9 +48,11 @@ class BotConsole():
         
         self.commands = {} 
         self.local_vars = {} 
+        self.commands_args = {}
         for command_name, command_datas in  self.file["commands"].items():
             self.commands[command_name] = command_datas["nodes"]
             self.local_vars[command_name] = self._file_to_var(command_datas["vars"])
+            self.commands_args[command_name] = command_datas["args"]
         
         self.vars = self._file_to_var(self.file["vars"])
         
@@ -71,7 +73,6 @@ class BotConsole():
         except:
             print("TOKENが間違っています")
             print("起動できませんでした")
-        print("is end")
         
 
       
@@ -103,7 +104,17 @@ class BotCog(commands.Cog):
         
         args.pop(0)
         
-        rc = RunCommand(self.bot, self.con, message, self.con.commands[command_name], args, self.con.local_vars[command_name].copy())
+        new_args = {}
+        for i ,(arg_name, arg_data) in enumerate(self.con.commands_args[command_name].items()):
+            if len(args) <= i:
+                new_args[arg_name] = tc.type_change(arg_data[0], arg_data[1])
+            else:
+                if not tc.type_check(arg_data[0], args[i]):
+                    print("引数が間違っています")
+                    return
+                new_args[arg_name] = tc.type_change(arg_data[0], args[i])
+                
+        rc = RunCommand(self.bot, self.con, message, self.con.commands[command_name], new_args, self.con.local_vars[command_name].copy())
         await rc.run()
         
         
@@ -148,6 +159,7 @@ class RunCommand():
     
     def create_options(self):
         options = {}
+        options["args"] = self.args
         options["vars"] = self.con.vars
         options["local_vars"] = self.local_vars
         options["message"] = self.message
@@ -219,6 +231,8 @@ class RunCommand():
             canSuccess = await self.print_process(node_data)
         if node_name == "メッセージを送る":
             canSuccess = await self.send_message_process(node_data)
+        if node_name == "メッセージを削除":
+            canSuccess = await self.clear_message_process(node_data)
         if node_name == "変数の設定":
             canSuccess = await self.var_setting_process(node_data)
             
@@ -297,6 +311,22 @@ class RunCommand():
             except:
                 return False
             await user.send(msg)
+        return True
+    
+    async def clear_message_process(self, data):
+        delmes = data[1]
+        if delmes == 1:
+            await self.message.delete()
+            return
+        
+        times = conv.conversion(data[0], self.create_options())
+        if not tc.type_check("int", times):
+            return
+        
+        times = tc.type_change("int", times)
+        
+        await self.message.channel.purge(limit=times)
+        
         return True
     
     async def var_setting_process(self, data):
@@ -416,66 +446,71 @@ class RunCommand():
                     user_name2 = data[4]
                 results.append(True) if user_name1 == user_name2 else results.append(False)
             
-            if data[0] == "変数":
+            if data[0] in ("変数", "引数") :
                 var_name = data[1]
-                var1 = self.get_var(var_name)
+                try:
+                    val1 = self.get_var(var_name) if data[0] == "変数" else self.args[var_name]
+                except:
+                    print("変数名or引数名が間違っています")
+                    results.append(False)
+                    continue
                 var_type = data[2]
-                val = data[3]
+                val2 = data[3]
                 cond = data[5]
                 if var_type in ("int", "flaot"):
-                    if val == 0:
-                        val = data[4]
-                        if not tc.type_check(var_type, val):
+                    if val2 == 0:
+                        val2 = data[4]
+                        if not tc.type_check(var_type, val2):
                             results.append(False)
                             continue
-                        val = tc.type_change(var_type, val)
-                    elif val == 1:
-                        results.append(var1%2 == 0)
+                        val2 = tc.type_change(var_type, val2)
+                    elif val2 == 1:
+                        results.append(val1%2 == 0)
                         continue
-                    elif val == 2:
-                        results.append(var1%2 == 0)
+                    elif val2 == 2:
+                        results.append(val1%2 == 0)
                         continue
-                    elif val == 3:
-                        val = data[4]
-                        if not tc.is_int(val):
+                    elif val2 == 3:
+                        val2 = data[4]
+                        if not tc.is_int(val2):
                             results.append(False)
                             continue
-                        val = tc.type_change("int", val)
-                        results.append(var1%val == 0)
+                        val2 = tc.type_change("int", val2)
+                        results.append(val1%val2 == 0)
                         continue
                     else:
-                        val = self.get_var(val)
+                        val2 = self.get_var(val2)
                 if var_type == "str":
-                    if val == 0:
-                        val = data[4]
+                    if val2 == 0:
+                        val2 = data[4]
                     else:
-                        val = self.get_var(val)
+                        val2 = self.get_var(val2)
                 if var_type == "bool":
-                    if val == 0:
-                        val = True
-                    elif val == 1:
-                        val = False
+                    if val2 == 0:
+                        val2 = True
+                    elif val2 == 1:
+                        val2 = False
                     else:
-                        val = self.get_var(val)
+                        val2 = self.get_var(val2)
                 
                 if cond == 0:
-                    results.append(var1 == val)
+                    results.append(val1 == val2)
                 elif cond == 1:
-                    results.append(var1 != val)
+                    results.append(val1 != val2)
                 elif cond == 2 and var_type not in ("bool") :
-                    results.append(var1 < val)
+                    results.append(val1 < val2)
                 elif cond == 3 and var_type not in ("bool"):
-                    results.append(var1 > val)
+                    results.append(val1 > val2)
                 elif cond == 4 and var_type not in ("bool"):
-                    results.append(var1 <= val)
+                    results.append(val1 <= val2)
                 elif cond == 5 and var_type not in ("bool"):
-                    results.append(var1 >= val)
+                    results.append(val1 >= val2)
                 elif cond == 6 and var_type not in ("bool", "int", "flaot"):
-                    results.append((val in var1))
+                    results.append((val2 in val1))
                 elif cond == 7 and var_type not in ("bool", "int", "flaot"):
-                    results.append((val not in var1))
+                    results.append((val2 not in val1))
                 else:
-                    results.append(var1 == val)
+                    results.append(val1 == val2)
             
             if data[0] in ("anot", "onot", "and", "or"):
                 results.append(await self.branch_process(data[1], data[0]))

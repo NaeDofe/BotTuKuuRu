@@ -290,7 +290,7 @@ class ConditionsWindow(tk.Toplevel):
         
 
 class SelectionWindow(tk.Toplevel):
-    def __init__(self, bg = "", par = None, name = "", cond_id = "", par_id = "", bf = None) -> None:
+    def __init__(self, bg = "", par = None, name = "", cond_id = "", par_id = "", bf: BranchFrame = None) -> None:
         super().__init__(bg=bg)
         
         self.par = par
@@ -317,7 +317,14 @@ class SelectionWindow(tk.Toplevel):
         if name == "ユーザー名":
             return UserNameFrameFirst(master, self.bg, data=[name, 0, 0, "", ""], sw=self, cond_id=self.cond_id, par_id=self.par_id)
         if name == "変数":
-            return VarFrameFirst(master, self.bg, data=[name, 0, "", "", "", 0], sw=self, cond_id=self.cond_id, par_id=self.par_id, vars=self.bf.con.top_left_frame.global_var)
+            vars = {**self.bf.con.top_left_frame.global_var, **self.bf.con.right_command_frame.commands[self.bf.command_name]["vars"]}
+            return VarFrameFirst(master, self.bg, data=[name, 0, "", "", "", 0], sw=self, cond_id=self.cond_id, par_id=self.par_id, vals=vars)
+        if name == "引数":
+            args = {**self.bf.con.right_command_frame.commands[self.bf.command_name]["args"]}
+            vals = {}
+            for arg_name, arg_datas in args.items():
+                vals[arg_name] = {"type": arg_datas[0]}
+            return VarFrameFirst(master, self.bg, data=[name, 0, "", "", "", 0], sw=self, cond_id=self.cond_id, par_id=self.par_id, vals=vals)
         return ttk.Frame(master, style="MYStyle.TFrame")
 
 
@@ -391,10 +398,10 @@ class VarFrameFirst(SelectionFrame):
     str_pre_conds = {"入力": True}
     bool_pre_conds = {"True": False, "False": False}
     
-    def __init__(self, master = None, bg = "", data = None, sw = None, cond_id = "", par_id = "", vars = []) -> None:
-        self.vars = vars
+    def __init__(self, master = None, bg = "", data = None, sw = None, cond_id = "", par_id = "", vals = []) -> None:
+        self.vals = vals
         pre_conds = {}
-        for var in self.vars:
+        for var in self.vals:
             pre_conds[var] = False
         super().__init__(master, bg, data, sw, pre_conds, "ユーザーを選択", cond_id, par_id)
 
@@ -402,7 +409,7 @@ class VarFrameFirst(SelectionFrame):
         index = self.check_list.index
         ent_check_box:NEntryCheckBox = self.check_list.check_boxes[index]
         self.data[1] = ent_check_box.text
-        type = self.vars[ent_check_box.text]["type"]
+        type = self.vals[ent_check_box.text]["type"]
         self.data[2] = type
         next_pre_conds = {}
         if type == "int":
@@ -413,11 +420,11 @@ class VarFrameFirst(SelectionFrame):
             next_pre_conds = self.str_pre_conds
         if type == "bool":
             next_pre_conds = self.bool_pre_conds
-        for var, var_data in self.vars.items():
+        for var, var_data in self.vals.items():
             if var_data["type"] != type:
                 continue
             next_pre_conds[var] = False
-        self.sw.next_frame(self, VarFrameSecond(self.selection_win, bg=self.bg, data=self.data, sw=self.sw, cond_id=self.cond_id, par_id=self.par_id, pre_conds=next_pre_conds, vars=self.vars))
+        self.sw.next_frame(self, VarFrameSecond(self.selection_win, bg=self.bg, data=self.data, sw=self.sw, cond_id=self.cond_id, par_id=self.par_id, pre_conds=next_pre_conds, vars=self.vals))
 
 class VarFrameSecond(SelectionFrame):
     
@@ -441,6 +448,7 @@ class VarFrameSecond(SelectionFrame):
         self.sw.next_frame(self, VarFrameLast(self.selection_win, bg=self.bg, data=self.data, sw=self.sw, cond_id=self.cond_id, par_id=self.par_id))
 
 class VarFrameLast(SelectionFrame):
+    
     pre_conds = {"等しい": False, "異なる": False, "よりも小さい": False, "よりも大きい": False, "よりも小さい": False, "以下": False, "以上": False, "含まれる": False, "含まれない": False}
     
     def __init__(self, master = None, bg = "", data = None, sw = None, cond_id = "", par_id = "") -> None:
@@ -451,6 +459,9 @@ class VarFrameLast(SelectionFrame):
         self.data[5] = index
         self.sw.add_condition(self.data, self.cond_id, self.par_id)
         self.destroy()
+        
+        
+        
         
 class PreCondFrame(ttk.Frame):
     def __init__(self, master = None, data = []) -> None:
@@ -483,10 +494,10 @@ class PreferenceConditions():
                 user2 = user2 + "\n入力: " + data[4]
             self.detail["ユーザー2"] = user2  +"\n"
         
-        if self.name == "変数":
-            self.detail["説明"] = "[変数]が[値] [比較]かったらTrueを返します"
+        if self.name in ("変数", "引数"):
+            self.detail["説明"] = f"[{self.name}]が[値] [比較]かったらTrueを返します"
             self.content += data[1]
-            self.detail["変数"] = data[1] +"\n"
+            self.detail[self.name] = data[1] +"\n"
             var_type = data[2]
             cond = data[5] 
             if cond == 0:

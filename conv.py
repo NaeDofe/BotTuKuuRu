@@ -21,7 +21,8 @@ def conversion(msg, options):
 def _option_conv(option, options):
     option_name = option.split("=")[0]
     val = option.split("=")[1]
-    
+    if option_name == "a":
+        val = _val_to_variable(val, options["args"])
     if option_name == "vg":
         val = _val_to_variable(val, options["vars"])
     if option_name == "vl":

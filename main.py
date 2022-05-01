@@ -105,7 +105,7 @@ class BotTkuuuru():
                     """)
         
         self.root.title("botツクール")
-        self.root.geometry("1500x600")
+        self.root.geometry("1500x700")
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
         

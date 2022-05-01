@@ -1,5 +1,6 @@
 from tkinter import ttk, messagebox
 from varset import AddVariableFrame, VariableDetailFrame
+from comset import AddCommandFrame, CommandDetailFrame
 from nodes import branch, variable
 import tkinter as tk
 import json
@@ -182,7 +183,8 @@ class TopLeftFrame(ttk.Frame):
         for command_name, command_data in commands.items():
             command_tree = command_data["tree"]
             command_dic[command_name] = {"nodes": self._tree_to_dict(command_tree, "", command_name)}
-            command_dic[command_name]["vars"] = self._variables_to_file_data(commands[command_name]["vars"])
+            command_dic[command_name]["vars"] = self._variables_to_file_data(command_data["vars"])
+            command_dic[command_name]["args"] = command_data["args"]
 
         
         self.con.file["commands"] = command_dic
@@ -258,7 +260,7 @@ class RightCommandFrame(ttk.Frame):
     def _file_to_commad_tree(self):
         for command_name, data_dic in self.file["commands"].items():
             node_deta = data_dic["nodes"]
-            
+            args = data_dic["args"]
             self.commands[command_name] = {}
             self.undo_nodes[command_name] = []
             tree_frame = ttk.Frame(self.command_note, style="MYStyle.TFrame")
@@ -281,6 +283,7 @@ class RightCommandFrame(ttk.Frame):
             self.commands[command_name]["tree"] = command_tree
             self.commands[command_name]["tree_frame"] = tree_frame
             self.commands[command_name]["scrollbar"] = scrollbar
+            self.commands[command_name]["args"] = args
             self.commands[command_name]["vars"] = {}
             self.commands[command_name]["var_tree"] = {}
             self.command_note.add(tree_frame, text=command_name)
@@ -478,13 +481,14 @@ class RightCommandFrame(ttk.Frame):
         for datas in self.commands[command_name]["nodes"].values():
             datas["frame"].destroy()
         
+        command_frame = self.commands[command_name]["frame"]
         tree_frame = self.commands[command_name]["tree_frame"]
+        args = self.commands[command_name]["args"]
+        vars = self.commands[command_name]["vars"]
+        var_tree = self.commands[command_name]["var_tree"]
         
         self.commands[command_name] = {}
         self.commands[command_name]["tree_frame"] = tree_frame
-        
-        """スクロールバーに帰るがんばれ未来に自分俺はご飯を食べるbye!!
-        """
         
         command_tree = ttk.Treeview(tree_frame, height=100)
         scrollbar = ttk.Scrollbar(tree_frame, orient = tk.VERTICAL, command=command_tree.yview)
@@ -501,8 +505,12 @@ class RightCommandFrame(ttk.Frame):
         command_tree.tag_configure("not_save", foreground=self.con.bt.not_save_color)
         command_tree.pack(fill="both", side="left")
         scrollbar.pack(fill="y", side="left")
+        self.commands[command_name]["frame"] = command_frame
         self.commands[command_name]["tree"] = command_tree
         self.commands[command_name]["scrollbar"] = scrollbar
+        self.commands[command_name]["args"] = args
+        self.commands[command_name]["vars"] = vars
+        self.commands[command_name]["var_tree"] = var_tree
         
         
         self.con.bottom_left_frame.initial_setting_node_frame()
@@ -555,9 +563,11 @@ class BottomLeftFrame(ttk.Frame):
             return nodede.ForFrame(self, self.command_frame, command_name, node_id, data)
         elif node_name == "メッセージを削除":
             return nodede.ClearMessageFrame(self, self.command_frame, command_name, node_id, data)
+        
     def create_command_detail_frame(self):
         for command_name in self.command_frame.commands.keys():
-            self.command_frame.commands[command_name]["frame"] = CommandDetailFrame(self, self.command_frame, command_name)
+            args = self.command_frame.commands[command_name]["args"]
+            self.command_frame.commands[command_name]["frame"] = CommandDetailFrame(self, self.command_frame, command_name, args)
             self.command_frame.commands[command_name]["frame"].grid(row=0, column=0, sticky="nsew")
             
     def show_frame(self, name):
@@ -651,126 +661,6 @@ class AddNodeFrame(ttk.Frame):
         frame = self.bottom.create_node_frame(command_name, node_id, item_name, [])
         frame.Ngrid(row=0, column=0, sticky="nsew")
         self.command_frame.commands[command_name]["nodes"][node_id] = {"name": item_name, "data": frame.data, "frame": frame}
-    
-    
-    
-class CommandSettingFrame(ttk.Frame):
-    def __init__(self, master = None, command_frame: RightCommandFrame = None):
-        super().__init__(master, style="MYStyle.TFrame")
-        
-        self.command_frame = command_frame
-        
-        self.name_lab = ttk.Label(self, text="名前", style="MYStyle.TLabel")
-        self.name_ent = ttk.Entry(self)
-        
-        self.name_lab.grid(row=0, column=0)
-        self.name_ent.grid(row=0, column=1)
-
-class CommandDetailFrame(CommandSettingFrame):
-    def __init__(self, master = None, command_frame = None, command_name = None, tab_id = None):
-        super().__init__(master, command_frame)
-    
-        self.command_name = command_name
-    
-        self.add_btn = ttk.Button(self, text="変更", command=self.change_command, style="Green.TButton")
-        self.delete_btn = ttk.Button(self, text="削除", command=self.delete_command, style="Delete.TButton")
-        self.add_btn.grid(row=1, column=1)
-        self.delete_btn.grid(row=2, column=1)
-        
-        self.name_ent.insert(0, self.command_name)
-    
-    def delete_command(self):
-        if not messagebox.askyesno("確認", "変更を保存しますか?"):
-            return
-        
-        self.command_frame.now_command_name = ""
-        self.command_frame.command_note.forget(self.command_frame.command_note.select())
-        for datas in self.command_frame.commands[self.command_name]["nodes"].values():
-            datas["frame"].destroy()
-        self.command_frame.commands[self.command_name]["tree"].destroy()
-        self.command_frame.commands[self.command_name]["var_tree"].destroy()
-        self.command_frame.commands.pop(self.command_name)
-        self.destroy()
-    
-    def change_command(self):
-        name = self.name_ent.get()
-        commands = self.command_frame.commands
-        names = [command_name for command_name in commands]
-        
-        if not name:
-            messagebox.showerror('エラー', '空欄を埋めてください')
-            return
-        if name in names and self.command_name != name:
-            messagebox.showerror('エラー', 'すでに同じ名前のコマンドがあります')
-            return
-
-        if not messagebox.askyesno("確認", "変更を保存しますか?"):
-            return
-        
-        
-        
-        #この下どうにか下noteの名前が変わるようにしてください！ご飯食べてくる！！bye
-        self.command_frame.command_note.tab(self.command_frame.command_note.select(), text=name)
-        self.command_frame.commands[name] = self.command_frame.commands.pop(self.command_name)
-        self.command_frame.undo_nodes[name] =  self.command_frame.undo_nodes.pop(self.command_name)
-        self.command_frame.con.top_left_frame.var_note.tab(str(self.command_frame.commands[name]["var_tree"]), text="local: "+name)
-        self.command_frame.commands[name]["var_tree"].heading('#0', text=name)
-        self.command_frame.commands[name]["tree"].heading('#0', text=name)
-        for var_data in self.command_frame.commands[name]["vars"].values():
-            var_data["frame"].par_name = name
-        for node_data in self.command_frame.commands[name]["nodes"].values():
-            node_data["frame"].command_name = name
-        self.command_name = name
-        self.command_frame.now_command_name = name
-        
-        self.command_frame.con.bottom_left_frame.frames["Variable"].update_dest()
-           
-class AddCommandFrame(CommandSettingFrame):
-    def __init__(self, master = None, command_frame: RightCommandFrame = None):
-        super().__init__(master, command_frame)
-        
-        self.add_btn = ttk.Button(self, text="追加", command=self.add_command, style="Green.TButton")
-        self.add_btn.grid(row=1, column=1)
-        
-        
-    def add_command(self):
-        name = self.name_ent.get()
-        commands = self.command_frame.commands
-        names = [command_name for command_name in commands]
-        
-        if not name:
-            messagebox.showerror('エラー', '空欄を埋めてください')
-            return
-        if name in names:
-            messagebox.showerror('エラー', 'すでに同じ名前のコマンドがあります')
-            return
-        
-        frame = ttk.Frame(self.command_frame.command_note)
-        tree = ttk.Treeview(frame, height=100)
-        scrollbar = ttk.Scrollbar(frame, orient = tk.VERTICAL, command=tree.yview)
-        tree.configure(yscrollcommand=lambda f, l: scrollbar.set(f, l))
-        tree.column("#0", width=600)
-        tree.heading("#0", text=name)
-        tree.bind("<<TreeviewSelect>>", self.command_frame.select_node)
-        tree.bind("<Control-c>", self.command_frame.copy)
-        tree.bind("<Control-v>", self.command_frame.paste)
-        tree.bind("<Control-d>", self.command_frame.deletion)
-        tree.bind("<Control-s>", self.command_frame.node_save)
-        tree.pack(fill="both", side="left")
-        scrollbar.pack(fill="y", side="left")
-        self.command_frame.undo_nodes[name] = []
-        self.command_frame.commands[name] = {}
-        self.command_frame.command_note.add(frame, text=name)
-        self.command_frame.commands[name]["frame"] = CommandDetailFrame(self.command_frame.con.bottom_left_frame, self.command_frame, name)
-        self.command_frame.commands[name]["tree_frame"] = frame
-        self.command_frame.commands[name]["tree"] = tree
-        self.command_frame.commands[name]["vars"] = {}
-        self.command_frame.commands[name]["var_tree"] = {}
-        self.command_frame.commands[name]["nodes"] = {}
-        self.command_frame.commands[name]["frame"].grid(row=0, column=0, sticky="nsew")
-        self.command_frame.con.top_left_frame.set_local_vars({}, name)
-        
-        self.command_frame.con.bottom_left_frame.frames["Variable"].update_dest()
 
 
 

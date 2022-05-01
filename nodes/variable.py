@@ -7,7 +7,7 @@ class VarFrame(NodeDetail):
         
         if not any(data):
             self.data = ["",[]]
-        
+            
         self.vars = {**self.con.top_left_frame.global_var,
                      **self.con.right_command_frame.commands[self.command_name]["vars"]}
         
@@ -127,9 +127,8 @@ class VarIntFrame(VarNodeDetail):
         val = self.val_ent.get()
         seme = self.seme_com.get()
         odm =  conv.odm(val)
-        print(odm)
         types = conv.get_var_type(val, self.vf.vars)
-        print(types)
+        
         if seme not in self.seme_texts:
             messagebox.showerror("エラー", "設定方法がうまく設定されていません")
             return
