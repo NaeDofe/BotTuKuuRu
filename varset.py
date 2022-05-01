@@ -2,19 +2,18 @@ from tkinter import ttk, messagebox
 import tkinter as tk
 import tc
 
-class VariableSettingFrame(tk.Frame):
+class VariableSettingFrame(ttk.Frame):
     def __init__(self, master = None):
-        super().__init__(master)
+        super().__init__(master, style="MYStyle.TFrame")
         
-        self.frame_name = ttk.Label(self, text="変数の詳細設定")
-        self.name_lab = ttk.Label(self, text="名前")
-        self.name_ent = ttk.Entry(self)
-        self.type_lab = ttk.Label(self, text="型")
-        self.type_com = ttk.Combobox(self, values=["str","int","float","bool"])
-        self.default_lab = ttk.Label(self, text="初期値")
-        self.default_ent = ttk.Entry(self)
+        self.name_lab = ttk.Label(self, text="名前", style="MYStyle.TLabel")
+        self.name_ent = ttk.Entry(self, width=40)
+        self.type_lab = ttk.Label(self, text="型", style="MYStyle.TLabel")
+        self.type_com = ttk.Combobox(self, values=["str","int","float","bool"], width=40)
+        self.default_lab = ttk.Label(self, text="初期値", style="MYStyle.TLabel")
+        self.default_ent = ttk.Entry(self, width=40)
         
-        self.frame_name.grid(row=0, column=1)
+        
         self.name_lab.grid(row=1, column=0)
         self.name_ent.grid(row=1, column=1)
         self.type_lab.grid(row=2, column=0)
@@ -45,14 +44,15 @@ class VariableDetailFrame(VariableSettingFrame):
         
         self.top = top
         
-        
-        self.change_btn = ttk.Button(self, text="変更", command=self.change_var)
-        self.delete_btn = ttk.Button(self, text="削除", command=self.delete_var)
+        self.frame_name = ttk.Label(self, text="変数の詳細設定", style="MYStyle.TLabel")
+        self.change_btn = ttk.Button(self, text="変更", command=self.change_var, style="Green.TButton")
+        self.delete_btn = ttk.Button(self, text="削除", command=self.delete_var, style="Delete.TButton")
         
         self.name_ent.insert(0, var_name)
         self.type_com.insert(0, var_type)
         self.default_ent.insert(0, var_default)
         
+        self.frame_name.grid(row=0, column=1)
         self.change_btn.grid(row=4, column=1)
         self.delete_btn.grid(row=5, column=1)
     
@@ -100,8 +100,10 @@ class AddVariableFrame(VariableSettingFrame):
         
         self.con = con
 
-        self.add_btn = ttk.Button(self, text="追加", command=self.append_var_tree)
+        self.frame_name = ttk.Label(self, text="変数の追加", style="MYStyle.TLabel")
+        self.add_btn = ttk.Button(self, text="追加", command=self.append_var_tree, style="Green.TButton")
         
+        self.frame_name.grid(row=0, column=1)
         self.add_btn.grid(row=4, column=1)
 
     
