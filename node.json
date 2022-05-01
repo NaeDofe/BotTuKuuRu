@@ -1,0 +1,22 @@
+{
+    "branch" : {
+        "if" : "",
+        "ifel" : "", 
+        "else" : ""
+    },
+    "repeat" : {
+        "for":"", 
+        "while":""
+    }
+    ,
+    "message" : {
+        "send":"", 
+        "embed":""
+    },
+    "other" : {
+        "wait_for":"",
+         "sleep":"",
+         "print":"",
+         "var":""
+        }
+}
