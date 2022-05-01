@@ -1,12 +1,15 @@
 from tkinter import ttk, messagebox
+from varset import AddVariableFrame, VariableDetailFrame
 import tkinter as tk
 import json
+import nodede
 import os
-import tc
+import threading
+import subprocess
 
 class WorkFrame(tk.Frame):
     
-    def __init__(self, master = None, file = None, file_name = "") -> None:
+    def __init__(self, master = None, file = None, file_name = ""):
         super().__init__(master)
         
         self.file = file
@@ -38,6 +41,7 @@ class TopLeftFrame(tk.Frame):
         self.command = self.con.right_command_frame
         self.bottom = self.con.bottom_left_frame
         
+        self.bot_is_run = False
         self.mode = 0
         self.selected_var_id = ""
         
@@ -97,10 +101,56 @@ class TopLeftFrame(tk.Frame):
         self.bottom.show_varpre_frame(name)
         
     def execution(self):
-        pass
+        if self.bot_is_run:
+            messagebox.showerror("エラー", "すでにbotを実行しています")
+            return
+        if not self.save():
+            return
+        if not messagebox.askyesno("確認", "botを実行しますか?"):
+            return
+        
+        thread = threading.Thread(target=self._bot_run)
+        thread.start()
+    
+    def _bot_run(self):
+        self.bot_is_run = True
+        subprocess.call("py bot.py")
+        self.bot_is_run = False
     
     def save(self):
-        pass
+        if not messagebox.askyesno("確認", "ファイルを保存しますか?"):
+            return
+        
+        command_trees = self.command.command_trees
+        
+        command_dic = {}
+        for command_tree in command_trees:
+            command_name = command_tree.heading("#0", "text")
+            command_dic[command_name] = self._tree_to_dict(command_tree, "")
+        
+        self.con.file["commands"] = command_dic
+        self.con.file["vars"] = self._variables_to_file_data()
+        self.con.file["token"] = self.con.token
+        self.con.file["prefix"] = self.con.prefix
+        
+        with open(f".\data\{self.con.file_name}.json", "w", encoding='utf-8') as f:
+            json.dump(self.con.file, f, ensure_ascii=False, indent=4)
+        
+        return True
+    
+    def _tree_to_dict(self, tree, parent):
+        dic = {}
+        for item in tree.get_children(parent):
+            name = tree.item(item, "text")
+            dic[item] = [name, self._tree_to_dict(tree, item), self.command.node_settings[item]["data"]]
+        return dic
+
+    def _variables_to_file_data(self):
+        dic = {}
+        for name, data in self.variables.items():
+            dic[name] = [data["type"], data["val"]]
+        return dic
+        
     
     def selection(self):
         self.mode = 0
@@ -153,11 +203,19 @@ class RightCommandFrame(tk.Frame):
     def _file_to_tree(self, tree, parent, data_dic):
         for val in data_dic.values():
             
-            child = tree.insert(parent=parent, index="end", text=val[0])
-            self.node_settings[child] = val[2]
+            node_name = val[0]
+            child_data = val[1]
+            node_data = val[2]
             
-            if not any(val[1]):
-                self._file_to_tree(tree, child, val[1])
+            node_id = tree.insert(parent=parent, index="end", text=node_name)
+            self.node_settings[node_id] = {"name": node_name, "data": node_data}
+            
+            if any(child_data):
+                self._file_to_tree(tree, node_id, child_data)
+    
+    def show_node_frame(self, node_id):
+        frame = self.node_settings[node_id]["frame"]
+        frame.tkraise()
     
     def select_node(self, event):
         tree = self.command_trees[self.tab_index]
@@ -170,10 +228,8 @@ class RightCommandFrame(tk.Frame):
         
         if mode == 0:
             node_lab["text"] = "ノード: "+item_name
-            if self.selected_id == item_id:
-                return
             self.selected_id = item_id
-            #ノードの詳細を表示する処理を描く↓
+            self.show_node_frame(item_id)
             return
             
         if not self.can_move(tree, item_id, item_parent):
@@ -234,11 +290,28 @@ class BottomLeftFrame(tk.Frame):
         self.frames["Detail"] = DetailedPreference(master=self, con=self.con)
         self.frames["Variable"] = AddVariableFrame(master=self, con=self.con)
         
+        self._set_node_frame()
+        
         for frame in self.frames.values():
             frame.grid(row=0, column=0, sticky="nsew")
             
         self.show_frame("Empty")
         
+    def _set_node_frame(self):
+        node_settings = self.command_frame.node_settings
+        for node_id, datas in node_settings.items():
+            name = datas["name"]
+            data = datas["data"]
+            frame = self.create_node_frame(node_id, name, data)
+            frame.grid(row=0, column=0, sticky="nsew")
+            self.command_frame.node_settings[node_id] = {"name": name, "data": data, "frame": frame}
+    
+    def create_node_frame(self, node_id, name, data):
+        if name == "ログ表示":
+            return nodede.PrintFrame(self, self.command_frame, node_id, data)
+        elif name == "メッセージを送る":
+            return nodede.SendMessageFrame(self, self.command_frame, node_id, data)
+            
     def show_frame(self, name):
         frame = self.frames[name]
         frame.tkraise()
@@ -247,148 +320,13 @@ class BottomLeftFrame(tk.Frame):
         variables = self.con.top_left_frame.variables
         frame = variables[name]["frame"]
         frame.tkraise()
-    
-    
-class VariableDetailFrame(tk.Frame):
-    def __init__(self, master = None, top: TopLeftFrame = None, var_name = "", var_type = "", var_default = ""):
-        super().__init__(master)
-        
-        self.top = top
-        
-        self.frame_name = ttk.Label(self, text="変数の詳細設定")
-        self.name_lab = ttk.Label(self, text="名前")
-        self.name_ent = ttk.Entry(self, width=40)
-        self.type_lab = ttk.Label(self, text="型")
-        self.type_com = ttk.Combobox(self, width=40, values=["str","int","float","bool","list","dict","None"])
-        self.default_lab = ttk.Label(self, text="初期値")
-        self.default_ent = ttk.Entry(self, width=40)
-        self.change_btn = ttk.Button(self, text="変更", command=self.change_var)
-        self.delete_btn = ttk.Button(self, text="削除", command=self.delete_var)
-        
-        self.name_ent.insert(0, var_name)
-        self.type_com.insert(0, var_type)
-        self.default_ent.insert(0, var_default)
-        
-        self.frame_name.grid(row=0, column=1)
-        self.name_lab.grid(row=1, column=0)
-        self.name_ent.grid(row=1, column=1)
-        self.type_lab.grid(row=2, column=0)
-        self.type_com.grid(row=2, column=1)
-        self.default_lab.grid(row=3, column=0)
-        self.default_ent.grid(row=3, column=1)
-        self.change_btn.grid(row=4, column=1)
-        self.delete_btn.grid(row=5, column=1)
-    
-    def change_var(self):
-        var_name = self.name_ent.get()
-        var_type = self.type_com.get()
-        var_default = self.default_ent.get()
-        
-        var_tree = self.top.var_tree
-        variables = self.top.variables
-        select_id = self.top.selected_var_id
-        original_name = var_tree.item(select_id, "values")[1]
-        
-        
-        if not all([var_name, var_type, var_default]):
-            messagebox.showerror('エラー', '空欄を埋めてください')
-            return
-        if var_name in variables and var_name != original_name:
-            messagebox.showerror('エラー', 'すでに同じ名前の変数があります')
-            return
-        if not tc.type_check(var_type, var_default):
-            messagebox.showerror('エラー', '型と値が合いません')
-            return
-        if not messagebox.askquestion("確認", "変数を変更しますか？"):
-            return
-        
-        index = var_tree.index(select_id)
-        
-        variables.pop(original_name)
-        var_tree.delete(self.top.selected_var_id)
-        
-        variables[var_name] = {"type": var_type, "val": var_default, "frame": self}
-        var_tree.insert(parent="", index=index, values=(var_type, var_name, var_default,))
-        
-        self.top.variables = variables
-    
-    def delete_var(self):
-        if not messagebox.askquestion("確認", "変数を削除しますか？"):
-            return
-        
-        var_tree = self.top.var_tree
-        select_id = self.top.selected_var_id
-        delete_name = var_tree.item(select_id, "values")[1]
-        
-        var_tree.delete(select_id)
-        self.top.variables.pop(delete_name)
-        self.top.selected_var_id = ""
-        
-        self.destroy()
 
-class AddVariableFrame(tk.Frame):
-    def __init__(self, master = None, con: WorkFrame = None):
-        super().__init__(master)
-        
-        self.con = con
-        
-        self.frame_name = ttk.Label(self, text="変数の追加")
-        self.name_lab = ttk.Label(self, text="名前")
-        self.name_ent = ttk.Entry(self, width=40)
-        self.type_lab = ttk.Label(self, text="型")
-        self.type_com = ttk.Combobox(self, width=40, values=["str","int","float","bool","list","dict","None"])
-        self.default_lab = ttk.Label(self, text="初期値")
-        self.default_ent = ttk.Entry(self, width=40)
-        self.add_btn = ttk.Button(self, text="追加", command=self.append_var_tree)
-        
-        self.frame_name.grid(row=0, column=1)
-        self.name_lab.grid(row=1, column=0)
-        self.name_ent.grid(row=1, column=1)
-        self.type_lab.grid(row=2, column=0)
-        self.type_com.grid(row=2, column=1)
-        self.default_lab.grid(row=3, column=0)
-        self.default_ent.grid(row=3, column=1)
-        self.add_btn.grid(row=4, column=1)
-
-    
-    def append_var_tree(self):
-        var_tree = self.con.top_left_frame.var_tree
-        variables = self.con.top_left_frame.variables
-        
-        var_name = self.name_ent.get()
-        var_type = self.type_com.get()
-        var_default = self.default_ent.get()
-        
-        if not all([var_name, var_type, var_default]):
-            messagebox.showerror('エラー', '空欄を埋めてください')
-            return
-        if var_name in variables:
-            messagebox.showerror('エラー', 'すでに同じ名前の変数があります')
-            return
-        if not tc.type_check(var_type, var_default):
-            messagebox.showerror('エラー', '型と値が合いません')
-            return
-        if not messagebox.askquestion("確認", "変数を追加しますか？"):
-            return
-        
-        frame = VariableDetailFrame(
-            master=self.con.bottom_left_frame, 
-            top=self.con.top_left_frame, 
-            var_name=var_name, 
-            var_type=var_type, 
-            var_default=var_default)
-        frame.grid(row=0, column=0, sticky="nsew")
-        
-        variables[var_name] = {"type": var_type, "val": var_default, "frame": frame}
-        self.con.top_left_frame.variables = variables
-        
-        var_tree.insert(parent="", index="end", values=(var_type, var_name, var_default,))
-        
         
 class AddNodeFrame(tk.Frame):
-    def __init__(self, master = None, command_frame: RightCommandFrame = None):
+    def __init__(self, master: BottomLeftFrame = None, command_frame: RightCommandFrame = None):
         super().__init__(master)
         
+        self.bottom = master
         self.command_frame = command_frame
         
         with open("node.json", "r", encoding="utf-8") as j:
@@ -416,10 +354,14 @@ class AddNodeFrame(tk.Frame):
         if not messagebox.askyesno(title="追加の確認", message=f"{item_name}を追加しますか?"):
             return
         
-        #コマンドツリーにアイテムを追加する
         tab_index = self.command_frame.tab_index
         tree = self.command_frame.command_trees[tab_index]
-        tree.insert(parent="", index="end", text=item_name)
+        node_id = tree.insert(parent="", index="end", text=item_name)
+        
+        frame = self.bottom.create_node_frame(node_id, item_name, [])
+        frame.grid(row=0, column=0, sticky="nsew")
+        self.command_frame.node_settings[node_id] = {"name": item_name, "data": [], "frame": frame}
+        
 
 class AddCommandFrame(tk.Frame):
     def __init__(self, master = None, command_frame: RightCommandFrame = None):
@@ -440,6 +382,7 @@ class AddCommandFrame(tk.Frame):
         name = self.name_ent.get()
         command_trees = self.command_frame.command_trees
         names = [tree.heading("#0", "text") for tree in command_trees]
+        
         if not name:
             messagebox.showerror('エラー', '空欄を埋めてください')
             return

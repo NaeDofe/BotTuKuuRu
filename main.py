@@ -1,6 +1,5 @@
+from tkinter import ttk, messagebox
 import tkinter as tk
-import tkinter.ttk as ttk
-import tkinter.messagebox as messagebox
 import os
 import work
 import json
