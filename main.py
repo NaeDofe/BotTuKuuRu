@@ -11,7 +11,9 @@ class BotTkuuuru():
         self.root = root
         
         self.root.title("botツクール")
-        self.root.geometry("1000x600")
+        self.root.geometry("1500x600")
+        self.root.columnconfigure(0, weight=1)
+        self.root.rowconfigure(0, weight=1)
         
         self.menubar = tk.Menu(root)
         self.filemenu = tk.Menu(self.menubar, tearoff=0)
@@ -36,7 +38,7 @@ class BotTkuuuru():
     def create_work_frame(self, file_name):
         with open(f".\data\{file_name}.json", "r", encoding="utf-8") as j:
             file = json.load(j)
-        self.frames["Work"] = work.WorkFrame(master=self.root, file=file)
+        self.frames["Work"] = work.WorkFrame(master=self.root, file=file, file_name=file_name)
         self.frames["Work"].grid(row=0, column=0, sticky="nsew")
         self.show_frame("Work")
         
