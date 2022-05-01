@@ -1,4 +1,3 @@
-from cmath import isinf
 from discord.ext import commands
 from tkinter import ttk
 from tkinter.scrolledtext import ScrolledText
@@ -111,19 +110,22 @@ class BotCog(commands.Cog):
         
         args.pop(0)
         
-        rc = RunCommand(self.con, message, self.con.file["commands"][command_name], args)
+        rc = RunCommand(self.bot, self.con, message, self.con.file["commands"][command_name], args)
         await rc.run()
         
     @commands.Cog.listener()
     async def on_command_error(self, ctx: commands.Context, error: commands.CommandError):
         if ctx.invoked_with in self.con.command_names:
             return
-        self.con.log_box.linsert("end", error)
+        self.con.log_box.linsert("end", str(error))
                 
     
     @commands.Cog.listener()
     async def on_ready(self):
         self.con.log_box.linsert("end", "起動しました")
+        
+    @commands.Cog.listener()
+    async def on_connect(self):
         while True:
             await asyncio.sleep(1)
             if not self.isStop:
@@ -131,10 +133,12 @@ class BotCog(commands.Cog):
             await self.bot.close()
             time.sleep(1)
             print("終了")
+        
 
 class RunCommand():
     
-    def __init__(self, con: BotConsole, message: discord.Message, datas, args) -> None:
+    def __init__(self, bot:commands.Bot, con: BotConsole, message: discord.Message, datas, args) -> None:
+        self.bot = bot
         self.con = con
         self.message = message
         self.datas = datas
@@ -163,17 +167,19 @@ class RunCommand():
 
         
     async def run(self):
+        can_branch = False
         for data in self.datas.values():
-            canSuccess = await self.process_start(data)
+            canSuccess, can_branch = await self.process_start(data, can_branch)
             if not canSuccess:
                 return
         
-    async def process_start(self, data):
+    async def process_start(self, data, can_branch):
         node_name = data[0]
         child_datas = data[1]
         node_data = data[2]
         
         canSuccess = True
+        can_child_process = True
         
         if node_name == "ログ表示":
             canSuccess = await self.print_process(node_data)
@@ -182,14 +188,33 @@ class RunCommand():
         if node_name == "変数の設定":
             canSuccess = await self.var_setting_process(node_data)
         
+        if node_name == "条件分岐":
+            can_child_process = await self.branch_process(node_data[1], node_data[0])
+            can_branch = False if can_child_process else True
+        elif node_name == "Else If":
+            if can_branch:
+                can_child_process = await self.branch_process(node_data[1], node_data[0])
+                if can_child_process:
+                    can_branch = False
+            else:
+                can_child_process = False
+        elif node_name == "Else":
+            if not can_branch:
+                can_child_process = False
+        else:
+            can_branch = False
+        
         if not canSuccess:
-            self.con.log_box.linsert("end","コマンドを終了しました")
-            return False
+            self.con.log_box.linsert("end","コマンドを終了しました", "error")
+            return False, False
+        if can_child_process:
+            child_can_branch = False
+            for child_data in child_datas.values():
+                canSuccess, child_can_branch = await self.process_start(child_data, child_can_branch)
+                if not canSuccess:
+                    return False, False
         
-        for child_data in child_datas.values():
-            await self.process_start(child_data)
-        
-        return True
+        return True, can_branch
         
     async def print_process(self, data):
         msg = conv.conversion(data[0], self.create_options())
@@ -212,7 +237,7 @@ class RunCommand():
             val = conv.conversion(val, self.create_options())
             val, isFormula = conv.calculation(val)
             if not isFormula:
-                self.con.log_box.linsert("end","値がintではありません。")
+                self.con.log_box.linsert("end","値がintではありません。", "error")
                 return False
             if data[1][1] == 0:
                 var += val
@@ -223,14 +248,11 @@ class RunCommand():
             isRightness = tc.type_change("bool", data[1][2])
             val, isFormula = conv.calculation(val, "float", isRightness)
             if not isFormula:
-                self.con.log_box.linsert("end","値がfloatではありません。")
+                self.con.log_box.linsert("end","値がfloatではありません。", "error")
                 return False
-            print(isRightness)
             if data[1][1] == 0:
                 if isRightness:
-                    print(var)
                     var = float(Decimal(str(var)) + Decimal(str(val)))
-                    print(var)
                 else:
                     var += val
             if data[1][1] == 1:
@@ -251,12 +273,55 @@ class RunCommand():
             if data[1][1] == 3:
                 val = self.con.vars[val]
                 if type(val) is not bool:
-                    self.con.log_box.linsert("end","値がboolではありません。")
+                    self.con.log_box.linsert("end","値がboolではありません。", "error")
                     return False
                 var = val
         self.con.vars[data[0]] = var
         return True
+    
+    async def branch_process(self, datas, bool_operator):
+        results = []
+        for data in datas.values():
+            if data[0] == "ユーザー名":
+                user_name1 = ""
+                if data[1] == 0:
+                    user_name1 = self.message.author.name
+                elif data[1] == 1:
+                    try:
+                        user1 = await self.bot.fetch_user(int(data[3]))
+                    except:
+                        self.con.log_box.linsert("end","UserIdが間違っています", "error")
+                        results.append(False)
+                        continue
+                    user_name1 = user1.name
+                user_name2 = ""
+                if data[2] == 0:
+                    user_name2 = self.message.author.name
+                elif data[2] == 1:
+                    try:
+                        user2 = await self.bot.fetch_user(int(data[4]))
+                    except:
+                        self.con.log_box.linsert("end","UserIdが間違っています", "error")
+                        results.append(False)
+                        continue
+                    user_name2 = user2.name
+                elif data[2] == 2:
+                    user_name2 = data[4]
+                results.append(True) if user_name1 == user_name2 else results.append(False)
             
+            if data[0] in ("anot", "onot", "and", "or"):
+                results.append(await self.branch_process(data[1], data[0]))
+        
+        if bool_operator == "and":
+            return all(results)
+        if bool_operator == "or":
+            return any(results)
+        if bool_operator == "anot":
+            return all([not val for val in results])
+        if bool_operator == "onot":
+            return any([not val for val in results])
+        return False
+                
 
 
 if __name__ == "__main__":

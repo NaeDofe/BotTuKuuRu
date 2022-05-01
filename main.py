@@ -28,8 +28,10 @@ class BotTkuuuru():
         with open("config.yml", "r") as yml:
             self.config = yaml.safe_load(yml)
         
+        #スタイルで変更できないwidgetに使う
         self.not_save_color = "yellow"
-        self.setting_bg = "white"
+        self.defalt_bg = "white"
+        
         style = ttk.Style()
         style.theme_use("clam")
         if self.config["style"] == "dark":
@@ -45,9 +47,11 @@ class BotTkuuuru():
             style.configure("Dict.TLabelframe.Label", font=("Yu Gothic UI Semibold", 8), background="#333333", foreground="green")
             style.configure("TopStyle.TLabel", font=("Yu Gothic UI Semibold", 8), background="#333333", foreground="#e6e6e6")
             style.configure("MYStyle.TLabel", font=("Yu Gothic UI Semibold", 10), background="#333333", foreground="#e6e6e6")
+            style.configure("Setting.TLabel", font=("Yu Gothic UI Semibold", 12), background="#333333", foreground="#e6e6e6")
             style.configure("NotSaveStyle.TLabel", font=("Yu Gothic UI Semibold", 7), background="#333333", foreground="#808080")
             style.configure("MYStyle.TCheckbutton", font=("Yu Gothic UI Semibold", 10), background="#333333", foreground="#e6e6e6")
             style.configure("Close.TButton", font=("Yu Gothic UI Semibold", 8, "bold"), background="#333333", foreground="#e6e6e6")
+            style.configure("Option.TCheckbutton", font=("Yu Gothic UI Semibold", 15), background="#333333", foreground="#e6e6e6")
             
             
             style.map('Treeview', foreground=fixed_map('foreground', style), background=fixed_map('background', style))
@@ -57,9 +61,10 @@ class BotTkuuuru():
             style.map("Delete.TButton", background=[('active', "#cc2929")])
             style.map("Green.TButton", background=[('active', "#12b32d")])
             style.map("MYStyle.TCheckbutton", background=[('active', "#e6e6e6")], foreground=[("active", "#333333")])
+            style.map("Option.TCheckbutton", background=[('active', "#e6e6e6")], foreground=[("active", "#333333")])
             
             self.not_save_color = "#ffff99"
-            self.setting_bg = "#333333"
+            self.defalt_bg = "#333333"
             
         if self.config["style"] == "light":
             style.configure("MainManu.TButton", font=("Yu Gothic UI Semibold", 12, "bold"), background="#e6e6e6", foreground="#333333")
@@ -74,9 +79,11 @@ class BotTkuuuru():
             style.configure("Dict.TLabelframe.Label", font=("Yu Gothic UI Semibold", 8), background="#e6e6e6", foreground="green")
             style.configure("TopStyle.TLabel", font=("Yu Gothic UI Semibold", 8), background="#e6e6e6", foreground="#333333")
             style.configure("MYStyle.TLabel", font=("Yu Gothic UI Semibold", 10), background="#e6e6e6", foreground="#333333")
+            style.configure("Setting.TLabel", font=("Yu Gothic UI Semibold", 12), background="#e6e6e6", foreground="#333333")
             style.configure("NotSaveStyle.TLabel", font=("Yu Gothic UI Semibold", 7), background="#e6e6e6", foreground="#808080")
             style.configure("MYStyle.TCheckbutton", font=("Yu Gothic UI Semibold", 10), background="#e6e6e6", foreground="#333333")
             style.configure("Close.TButton", font=("Yu Gothic UI Semibold", 8, "bold"), background="#e6e6e6", foreground="#333333")
+            style.configure("Option.TCheckbutton", font=("Yu Gothic UI Semibold", 15), background="#e6e6e6", foreground="#333333")
             
             style.map('Treeview', foreground=fixed_map('foreground', style), background=fixed_map('background', style))
             style.map("MainManu.TButton", background=[('active', "#cccccc")])
@@ -85,9 +92,10 @@ class BotTkuuuru():
             style.map("Delete.TButton", background=[('active', "#cc2929")])
             style.map("Green.TButton", background=[('active', "#12b32d")])
             style.map("MYStyle.TCheckbutton", background=[('active', "#e6e6e6")], foreground=[("active", "#333333")])
+            style.map("Option.TCheckbutton", background=[('active', "#e6e6e6")], foreground=[("active", "#333333")])
         
             self.not_save_color = "#b4cc3d"
-            self.setting_bg ="#e6e6e6"
+            self.defalt_bg ="#e6e6e6"
         
         
         self.root.tk.eval("""
@@ -141,9 +149,9 @@ class BotTkuuuru():
         self.show_conf_win(self.root.destroy)
     
     def show_conf_win(self, func):
-        self.conf_win = tk.Toplevel(bg=self.setting_bg)
+        self.conf_win = tk.Toplevel(bg=self.defalt_bg)
         self.conf_win.title("確認")
-        self.conf_win.geometry("300x100")
+        self.conf_win.geometry("300x100+810+490")
         self.conf_win.grab_set()
         description_lab = ttk.Label(self.conf_win, text="閉じる前に変更を保存しますか?", style="MYStyle.TLabel")
         
@@ -188,9 +196,10 @@ class BotTkuuuru():
         frame.tkraise()
     
     def show_setting(self):
-        setting_win = Setting(self, self.setting_bg)
+        setting_win = Setting(self, self.defalt_bg)
         setting_win.geometry("450x600")
         setting_win.grab_set()
+        
         
         
 class StartFrame(ttk.Frame):
@@ -331,8 +340,8 @@ class Setting(tk.Toplevel):
         self.frame = ttk.Frame(self, style="MYStyle.TFrame")
         self.save_frame = ttk.Frame(self, style="MYStyle.TFrame")
         
+        self.title_lbl = ttk.Label(self.frame, text="設定", style="Setting.TLabel")
         self.need_save_lab = ttk.Label(self.frame, text="", style="NotSaveStyle.TLabel")
-        self.title_lbl = ttk.Label(self.frame, text="設定", style="MYStyle.TLabel")
         
         self.style_lab = ttk.Label(self.frame, text="スタイル", style="MYStyle.TLabel")
         self.style_com = ttk.Combobox(self.frame, values=self.styles)
@@ -346,9 +355,8 @@ class Setting(tk.Toplevel):
         self.frame.grid(row=0, column=0, sticky="nsew")
         self.save_frame.grid(row=1, column=0, sticky="se")
         
-        
-        self.need_save_lab.grid(row=0, column=1)
-        self.title_lbl.grid(row=1, column=1)
+        self.title_lbl.grid(row=0, column=0, columnspan=10, pady=10)
+        self.need_save_lab.grid(row=1, column=1)
         self.style_lab.grid(row=2, column=0)
         self.style_com.grid(row=2, column=1)
         self.attention_lab.grid(row=2, column=2)
